@@ -2,7 +2,10 @@ import { env } from 'cloudflare:test';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { applyEvent } from '../../ingest/src/apply';
 import { REPORTS_MAX_ROWS, REPORTS_PER_IP_PER_DAY, upsertProject, upsertTopic, upsertUpdate } from '../../shared/db';
-import app from '../index';
+import { createApp } from '../index';
+
+// Edge caching is tested in functions/edgeCache.test.ts; off here so tests see fresh D1 data.
+const app = createApp({ edgeCache: false });
 
 const db = (env as unknown as { DB: D1Database }).DB;
 const TOKEN = 'test-admin-token-not-a-secret';

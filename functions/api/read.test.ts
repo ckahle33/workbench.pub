@@ -1,7 +1,10 @@
 import { env } from 'cloudflare:test';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { FEED_SCAN_MULTIPLIER, FEED_SCAN_WINDOW, feedScanWindow, hideUri, upsertFollow, upsertProject, upsertReply, upsertTopic, upsertUpdate } from '../../shared/db';
-import app from '../index';
+import { createApp } from '../index';
+
+// Edge caching is tested in functions/edgeCache.test.ts; off here so tests see fresh D1 data.
+const app = createApp({ edgeCache: false });
 import { readRoutes } from './read';
 
 const db = (env as unknown as { DB: D1Database }).DB;
