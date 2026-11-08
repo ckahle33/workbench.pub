@@ -15,8 +15,9 @@ describe('TopicSelector create', () => {
     mockApi(() => ({ items: [], cursor: null }));
     const err = vi.spyOn(console, 'error').mockImplementation(() => {});
     vi.mocked(createTopic).mockResolvedValue({ uri: `at://${ALICE}/pub.workbench.topic/x`, slug: 'lasers' });
-    const onChange = vi.fn(() => {
-      throw new Error('parent broke');
+    // Throws only for the value the test is about, so the select's own onChange(null) is unaffected.
+    const onChange = vi.fn((slug: string | null) => {
+      if (slug === 'lasers') throw new Error('parent broke');
     });
     render(<TopicSelector value={null} onChange={onChange} />);
     fireEvent.change(screen.getByLabelText(/^topic/i), { target: { value: '__new__' } });
