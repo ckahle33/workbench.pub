@@ -166,17 +166,29 @@ describe('followSubject', () => {
     await followSubject(s, 'project', PROJECT, { now: NOW });
     const arg = createRecord.mock.calls[0][0] as { collection: string; record: Record<string, unknown> };
     expect(arg.collection).toBe('pub.workbench.follow');
-    expect(arg.record.subject).toBe(PROJECT);
+    expect(arg.record).toEqual({
+      $type: 'pub.workbench.follow',
+      kind: 'project',
+      subject: PROJECT,
+      createdAt: '2026-11-07T12:00:00.000Z',
+    });
+    expect(validateRecord('pub.workbench.follow', arg.record).ok).toBe(true);
   });
-  it('follows a topic by its at-uri', async () => {
+  it('follows a topic by canonical slug', async () => {
     const { s, createRecord } = fake();
-    await followSubject(s, 'topic', 'at://did:plc:x/pub.workbench.topic/woodworking');
-    expect(createRecord).toHaveBeenCalledTimes(1);
+    await followSubject(s, 'topic', 'woodworking');
+    const arg = createRecord.mock.calls[0][0] as { record: Record<string, unknown> };
+    expect(arg.record).toMatchObject({ kind: 'topic', subject: 'woodworking' });
+    expect(validateRecord('pub.workbench.follow', arg.record).ok).toBe(true);
   });
-  it('rejects a bare slug and a mismatched kind without a network call', async () => {
+  it.each([
+    ['topic', 'Woodworking'],
+    ['topic', PROJECT],
+    ['project', 'woodworking'],
+    ['project', 'at://did:plc:x/pub.workbench.topic/woodworking'],
+  ] as const)('rejects %s follow of %s without a network call', async (kind, key) => {
     const { s, createRecord } = fake();
-    await expect(followSubject(s, 'topic', 'woodworking')).rejects.toThrow();
-    await expect(followSubject(s, 'topic', PROJECT)).rejects.toThrow();
+    await expect(followSubject(s, kind, key)).rejects.toThrow();
     expect(createRecord).not.toHaveBeenCalled();
   });
 });

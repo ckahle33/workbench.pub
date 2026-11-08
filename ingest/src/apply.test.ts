@@ -82,6 +82,7 @@ describe('applyEvent', () => {
       }),
       commit(A, 'create', 'pub.workbench.follow', 'f1', {
         $type: 'pub.workbench.follow',
+        kind: 'project',
         subject: puri,
         createdAt: '2026-01-03T00:00:00Z',
       }),
@@ -92,6 +93,23 @@ describe('applyEvent', () => {
     for (const e of events) await applyEvent(db, e, NOW);
     expect(await dump()).toEqual(first);
     expect(first.projects).toHaveLength(1);
+  });
+
+  it('stores topic and project follows idempotently and rejects an invalid one', async () => {
+    const puri = `at://${A}/${P}/p1`;
+    const follow = (rkey: string, kind: string, subject: string) =>
+      commit(A, 'create', 'pub.workbench.follow', rkey, {
+        $type: 'pub.workbench.follow',
+        kind,
+        subject,
+        createdAt: '2026-01-03T00:00:00Z',
+      });
+    const events = [follow('f1', 'topic', 'electronics'), follow('f2', 'project', puri)];
+    for (const e of events) expect(await applyEvent(db, e, NOW)).toBe('applied');
+    for (const e of events) await applyEvent(db, e, NOW);
+    expect(await count('follows')).toBe(2);
+    expect(await applyEvent(db, follow('f3', 'topic', 'Electronics'), NOW)).not.toBe('applied');
+    expect(await count('follows')).toBe(2);
   });
 
   it('stores an update whose project does not exist yet', async () => {

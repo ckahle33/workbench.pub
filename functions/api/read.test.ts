@@ -111,10 +111,10 @@ describe('feed', () => {
     const none = (await (await get(`/api/feed?following=${carol}`)).json()) as { items: unknown[] };
     expect(none.items).toEqual([]);
     await upsertFollow(db, { uri: `at://${carol}/pub.workbench.follow/f1`, did: carol, rkey: 'f1', indexedAt: 1 }, {
-      $type: 'pub.workbench.follow', subject: P2, createdAt: '2026-01-01T00:00:00.000Z',
+      $type: 'pub.workbench.follow', kind: 'project', subject: P2, createdAt: '2026-01-01T00:00:00.000Z',
     });
     await upsertFollow(db, { uri: `at://${carol}/pub.workbench.follow/f2`, did: carol, rkey: 'f2', indexedAt: 1 }, {
-      $type: 'pub.workbench.follow', subject: `at://${ALICE}/pub.workbench.topic/woodworking`, createdAt: '2026-01-01T00:00:00.000Z',
+      $type: 'pub.workbench.follow', kind: 'topic', subject: 'woodworking', createdAt: '2026-01-01T00:00:00.000Z',
     });
     const both = (await (await get(`/api/feed?following=${carol}`)).json()) as { items: { rkey: string }[] };
     expect(both.items.map((i) => i.rkey)).toEqual(['u2', 'u1']);

@@ -137,26 +137,20 @@ export async function createReply(s: Session, i: { subject: string; body: string
   return { uri: await put(s, record.$type, record) };
 }
 
-/**
- * Projects are followed by at-uri. The follow lexicon only accepts an at-uri
- * subject, so a topic must also be given as the topic record's at-uri; a bare
- * slug is rejected rather than writing a record ingest would drop.
- */
+/** Projects are followed by at-uri, topics by canonical slug. */
 export async function followSubject(
   s: Session,
   kind: 'project' | 'topic',
   key: string,
   o?: WriteOptions,
 ): Promise<{ uri: string }> {
-  const collection = `pub.workbench.${kind}`;
-  if (!key.startsWith('at://')) {
-    throw new Error(
-      kind === 'topic' ? 'Following a topic needs the topic record address' : 'Following a project needs its address',
-    );
+  if (kind === 'topic' && normalizeSlug(key) !== key) throw new Error('Topic must be a canonical slug');
+  if (kind === 'project' && !/^at:\/\/[^/]+\/pub\.workbench\.project\/[^/]+$/.test(key)) {
+    throw new Error('Following a project needs the project record address');
   }
-  if (!key.includes(`/${collection}/`)) throw new Error(`That is not a ${kind} address`);
   const record = checked('pub.workbench.follow', {
     $type: 'pub.workbench.follow',
+    kind,
     subject: key,
     createdAt: createdAt(o),
   });

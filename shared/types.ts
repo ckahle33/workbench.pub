@@ -71,7 +71,8 @@ export interface ReplyRecord {
 
 export interface FollowRecord {
   $type: 'pub.workbench.follow';
-  /** at-uri of a project or topic. */
+  kind: 'project' | 'topic';
+  /** Project: at-uri of a project record. Topic: canonical slug. */
   subject: string;
   createdAt: string;
 }

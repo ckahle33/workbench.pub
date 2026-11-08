@@ -8,14 +8,19 @@
       "record": {
         "type": "object",
         "required": [
+          "kind",
           "subject",
           "createdAt"
         ],
         "properties": {
+          "kind": {
+            "type": "string",
+            "knownValues": ["project", "topic"],
+            "description": "What is being followed."
+          },
           "subject": {
             "type": "string",
-            "format": "at-uri",
-            "description": "A project or topic."
+            "description": "For kind project, the at-uri of a pub.workbench.project record. For kind topic, the canonical topic slug."
           },
           "createdAt": {
             "type": "string",

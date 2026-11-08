@@ -163,7 +163,15 @@ const validators: { [C in Collection]: (o: Obj) => void } = {
     datetime(o, 'createdAt');
   },
   'pub.workbench.follow'(o) {
-    atUri(o, 'subject');
+    if (o.kind === 'project') {
+      const uri = atUri(o, 'subject');
+      if (uri.split('/')[3] !== 'pub.workbench.project') fail('subject must be a project at-uri');
+    } else if (o.kind === 'topic') {
+      const s = str(o, 'subject', 40);
+      if (normalizeSlug(s) !== s) fail('subject must be a canonical slug');
+    } else {
+      fail('kind must be project or topic');
+    }
     datetime(o, 'createdAt');
   },
 };
@@ -173,7 +181,7 @@ const KNOWN_KEYS: { [C in Collection]: string[] } = {
   'pub.workbench.project': ['$type', 'title', 'summary', 'topic', 'status', 'cover', 'createdAt'],
   'pub.workbench.update': ['$type', 'project', 'heading', 'body', 'images', 'links', 'parts', 'createdAt'],
   'pub.workbench.reply': ['$type', 'subject', 'body', 'createdAt'],
-  'pub.workbench.follow': ['$type', 'subject', 'createdAt'],
+  'pub.workbench.follow': ['$type', 'kind', 'subject', 'createdAt'],
 };
 
 export function validateRecord<C extends Collection>(

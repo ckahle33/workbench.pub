@@ -81,6 +81,7 @@ describe('upserts', () => {
     });
     await upsertFollow(db, meta('at://did:plc:a/pub.workbench.follow/f1'), {
       $type: 'pub.workbench.follow',
+      kind: 'topic',
       subject: 'robots',
       createdAt: '2026-01-01T00:00:00Z',
     });

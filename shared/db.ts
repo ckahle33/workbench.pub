@@ -345,7 +345,7 @@ export async function listFeed(
   const seek = opts.cursor ? 'AND (indexed_at, uri) < (?, ?)' : '';
   const followed = opts.followingDid
     ? `AND (p.uri IN (SELECT subject_uri FROM follows WHERE did = ? AND hidden = 0)
-        OR p.topic_slug IN (SELECT t.slug FROM follows f JOIN topics t ON t.uri = f.subject_uri
+        OR p.topic_slug IN (SELECT t.slug FROM follows f JOIN topics t ON t.slug = f.subject_uri
                             WHERE f.did = ? AND f.hidden = 0 AND t.hidden = 0))`
     : '';
   // Placeholder order in the SQL: follow filter (SELECT list) first, then the seek.

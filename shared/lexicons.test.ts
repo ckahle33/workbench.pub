@@ -40,6 +40,7 @@ const valid: Record<Collection, Record<string, unknown>> = {
   },
   'pub.workbench.follow': {
     $type: 'pub.workbench.follow',
+    kind: 'project',
     subject: projectUri,
     createdAt: now,
   },
@@ -51,6 +52,21 @@ describe('validateRecord', () => {
       expect(validateRecord(collection as Collection, record)).toEqual({ ok: true, value: record });
     });
   }
+
+  describe('follow', () => {
+    const f = valid['pub.workbench.follow'];
+    const bad = (r: unknown) => expect(validateRecord('pub.workbench.follow', r).ok).toBe(false);
+    it('accepts a topic follow by canonical slug', () => {
+      expect(validateRecord('pub.workbench.follow', { ...f, kind: 'topic', subject: 'electronics' }).ok).toBe(true);
+    });
+    it('rejects a non-canonical topic slug', () => bad({ ...f, kind: 'topic', subject: 'Electronics' }));
+    it('rejects a topic follow by at-uri', () => bad({ ...f, kind: 'topic', subject: projectUri }));
+    it('rejects a project follow of a non-project at-uri', () =>
+      bad({ ...f, kind: 'project', subject: 'at://did:plc:abc123/pub.workbench.topic/electronics' }));
+    it('rejects a project follow by slug', () => bad({ ...f, kind: 'project', subject: 'electronics' }));
+    it('rejects an unknown kind', () => bad({ ...f, kind: 'user' }));
+    it('rejects a missing kind', () => bad({ $type: f.$type, subject: f.subject, createdAt: f.createdAt }));
+  });
 
   it('accepts an update with only required fields', () => {
     const { images, links, parts, ...min } = valid['pub.workbench.update'];
@@ -109,7 +125,7 @@ describe('validateRecord with hostile input', () => {
     rejects('pub.workbench.update', { ...upd, images: {} });
   });
   it('rejects an own __proto__ key', () => {
-    const r = JSON.parse(`{"__proto__":{},"$type":"pub.workbench.follow","subject":"${projectUri}","createdAt":"${now}"}`);
+    const r = JSON.parse(`{"__proto__":{},"$type":"pub.workbench.follow","kind":"project","subject":"${projectUri}","createdAt":"${now}"}`);
     rejects('pub.workbench.follow', r);
     rejects('pub.workbench.follow', JSON.parse('{"__proto__":{}}'));
   });
