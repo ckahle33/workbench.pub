@@ -22,6 +22,8 @@ export interface Env {
   ADMIN_TOKEN?: string;
   /** Optional secret salt for hashing reporter IPs. */
   IP_HASH_SALT?: string;
+  /** DEV ONLY: '1' serves generated placeholders for did:plc:demo... blobs (functions/api/devPlaceholder.ts). Never set in production. */
+  DEV_PLACEHOLDERS?: string;
 }
 
 export interface ReadOptions {

@@ -2,3 +2,6 @@
 ADMIN_TOKEN=
 # Optional: secret salt for hashing reporter IPs.
 IP_HASH_SALT=
+# DEV ONLY: '1' serves generated placeholder images for the did:plc:demo... seed (npm run db:seed:local).
+# Never set this in wrangler.toml or in production.
+DEV_PLACEHOLDERS=1

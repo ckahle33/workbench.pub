@@ -191,3 +191,44 @@ describe('GET /api/blob edge caching', () => {
     expect(await second.cache.match(`https://cache.internal/did/${DID}`)).toBeUndefined();
   });
 });
+
+describe('DEV_PLACEHOLDERS (local demo seed only)', () => {
+  const DEMO = 'did:plc:demojun0001';
+  const req = (s: ReturnType<typeof stub>, path: string, extra: Record<string, unknown>) => {
+    const app = new Hono<{ Bindings: Env }>();
+    app.route('/api', blobRoutes({ fetchFn: s.fn, cache: false }));
+    return app.request(path, {}, { ...bindings, ...extra });
+  };
+
+  it('is off when the var is unset: a demo DID gets the normal path (404, no placeholder)', async () => {
+    const s = happy();
+    const r = await req(s, `/api/blob/${DEMO}/ph-43-a`, { DEV_PLACEHOLDERS: undefined });
+    expect(r.status).toBe(404);
+    expect(r.headers.get('content-type')).not.toMatch(/svg/);
+  });
+
+  it('is off for a non-demo DID even with the var set', async () => {
+    const s = happy();
+    const r = await req(s, `/api/blob/${DID}/ph-43-a`, { DEV_PLACEHOLDERS: '1' });
+    expect(r.status).toBe(404);
+    expect(s.calls).toHaveLength(0); // ph-43-a is not a CID, so it never even resolves
+    const real = await req(s, `/api/blob/${DID}/${CID}`, { DEV_PLACEHOLDERS: '1' });
+    expect(real.headers.get('content-type')).toBe('image/png');
+  });
+
+  it('serves a stable SVG with sandboxing headers and the aspect ratio from the CID', async () => {
+    const s = happy();
+    const r = await req(s, `/api/blob/${DEMO}/ph-34-d`, { DEV_PLACEHOLDERS: '1' });
+    expect(r.status).toBe(200);
+    expect(r.headers.get('content-type')).toBe('image/svg+xml');
+    expect(r.headers.get('cache-control')).toBe('no-store');
+    expect(r.headers.get('x-content-type-options')).toBe('nosniff');
+    expect(r.headers.get('content-security-policy')).toContain('sandbox');
+    const svg = await r.text();
+    expect(svg).toMatch(/^<svg [^>]*width="900" height="1200"/);
+    expect(svg).toContain('PLACEHOLDER 3:4');
+    expect(svg).toContain('#d0201a');
+    expect(await (await req(s, `/api/blob/${DEMO}/ph-34-d`, { DEV_PLACEHOLDERS: '1' })).text()).toBe(svg);
+    expect(s.calls).toHaveLength(0);
+  });
+});

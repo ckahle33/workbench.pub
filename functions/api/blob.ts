@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { isSafeUrl, safeFetch } from '../../shared/ssrf';
 import { defaultCache, type CacheProvider } from '../edgeCache';
+import { placeholderEnabled, placeholderResponse } from './devPlaceholder';
 import type { Env } from './read';
 
 export interface BlobOptions {
@@ -81,6 +82,9 @@ export function blobRoutes(opts: BlobOptions = {}): Hono<{ Bindings: Env }> {
 
   app.get('/blob/:did/:cid', async (c) => {
     const { did, cid } = c.req.param();
+    // DEV ONLY: generated placeholders for the local demo seed. Unreachable unless the env sets
+    // DEV_PLACEHOLDERS=1 (local .dev.vars only) and the DID is a fake did:plc:demo... one.
+    if (placeholderEnabled(c.env ?? {}, did, cid)) return placeholderResponse(cid);
     if (!CID.test(cid) || !didDocUrl(did)) return notFound(c);
     try {
       // Content is addressed by CID, so the request URL is a safe cache key. Only responses that
