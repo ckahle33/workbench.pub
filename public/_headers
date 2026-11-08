@@ -1,0 +1,9 @@
+# Security headers for static assets (the HTML shell, JS/CSS, client-metadata.json), applied by
+# Workers static assets. /api/* responses come from the Worker and set their own headers.
+# connect-src allows any https origin because the OAuth client talks to each user's own PDS and
+# authorization server, which can be anywhere. img-src allows https: for link-card images and avatars.
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  X-Frame-Options: DENY
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https:; connect-src 'self' https:; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
