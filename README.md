@@ -53,6 +53,10 @@ Verified 2026-11-07. Pinned versions: vitest 4.1.x (@cloudflare/vitest-plugin 1.
 
 `npm run dev` (Vite, proxies `/api` to wrangler on 8787), `npm run build`, `npm test`, `npm run typecheck`.
 
+## Seeding topics
+
+The starter topics (electronics, music-production, ceramics, woodworking, illustration, 3d-printing) are `pub.workbench.topic` records in a dedicated site account's repo. Create that account on the workbench.pub domain, then create an app password for it in its settings. Copy `.env.example` to `.env` (gitignored) and fill in `SEED_IDENTIFIER` (the site account's handle) and `SEED_APP_PASSWORD`, then run `npm run seed:topics` once after deploy. It skips topics that already exist, so re-running is safe. Never commit credentials or paste the app password anywhere else; revoke it when you are done.
+
 ## Tests
 
 `vitest.workspace.ts` defines three projects: `node` (shared/, ingest/, scripts/), `workers` (D1 tests in the
