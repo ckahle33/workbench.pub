@@ -84,4 +84,40 @@ describe('ReportButton', () => {
     expect(errSpy).toHaveBeenCalledTimes(1);
     expect(String(errSpy.mock.calls[0][0])).toBe('[write] stage=create status=503 error=ReportFailed message=""');
   });
+
+  it('does not carry the reported state over when the same instance gets another post', async () => {
+    respond(201);
+    const { rerender } = render(<ReportButton uri={URI} />);
+    open();
+    send();
+    await screen.findByText(/thanks/i);
+    rerender(<ReportButton uri="at://did:plc:x/pub.workbench.update/u2" />);
+    expect(screen.getByRole('button', { name: /^report/i })).toBeInTheDocument();
+    rerender(<ReportButton uri={URI} />);
+    expect(screen.getByText(/thanks/i)).toBeInTheDocument();
+  });
+
+  it('keeps only the 200 most recent reported posts', async () => {
+    respond(201);
+    localStorage.setItem('wb.reported', JSON.stringify(Array.from({ length: 200 }, (_, i) => `at://x/y/old${i}`)));
+    render(<ReportButton uri={URI} />);
+    open();
+    send();
+    await screen.findByText(/thanks/i);
+    const list = JSON.parse(localStorage.getItem('wb.reported')!) as string[];
+    expect(list).toHaveLength(200);
+    expect(list[199]).toBe(URI);
+    expect(list).not.toContain('at://x/y/old0');
+  });
+
+  it('logs a network tag when the request never reaches the server', async () => {
+    api.setFetch(async () => {
+      throw new TypeError('Failed to fetch');
+    });
+    render(<ReportButton uri={URI} />);
+    open();
+    send();
+    await screen.findByRole('alert');
+    expect(String(errSpy.mock.calls[0][0])).toBe('[write] stage=create status=1 error=NetworkError message=""');
+  });
 });

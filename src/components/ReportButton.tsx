@@ -4,15 +4,25 @@ import { logFailure } from '../records/errors';
 import { afterWrite, FieldError, GENERIC_ERROR, TextField } from './Composer';
 
 const REASON_MAX = 500;
-const reportedKey = (uri: string) => `wb.reported:${uri}`;
+export const REPORTED_KEY = 'wb.reported';
+export const REPORTED_MAX = 200;
 
-/** Remembered in this browser so the same post is not reported twice by accident. */
-function wasReported(uri: string): boolean {
+function reportedList(): string[] {
   try {
-    return window.localStorage.getItem(reportedKey(uri)) === '1';
+    const v: unknown = JSON.parse(window.localStorage.getItem(REPORTED_KEY) ?? '[]');
+    return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
   } catch {
-    return false;
+    return [];
   }
+}
+
+/** Remembered in this browser (the most recent REPORTED_MAX posts) so the same post is not reported twice by accident. */
+function wasReported(uri: string): boolean {
+  return reportedList().includes(uri);
+}
+
+function remember(uri: string): void {
+  window.localStorage.setItem(REPORTED_KEY, JSON.stringify([...reportedList().filter((u) => u !== uri), uri].slice(-REPORTED_MAX)));
 }
 
 function message(e: unknown): string {
@@ -25,6 +35,11 @@ function message(e: unknown): string {
 
 /** Anyone may report a post; the reason is optional and capped at 500 characters. */
 export function ReportButton({ uri }: { uri: string }) {
+  // Keyed by uri so a reused instance never carries another post's state.
+  return <ReportForm key={uri} uri={uri} />;
+}
+
+function ReportForm({ uri }: { uri: string }) {
   const panel = useId();
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState('');
@@ -39,11 +54,11 @@ export function ReportButton({ uri }: { uri: string }) {
     setError(null);
     try {
       await api.post('/api/report', { uri, reason: reason.trim() });
-      afterWrite(() => window.localStorage.setItem(reportedKey(uri), '1'));
+      afterWrite(() => remember(uri));
       afterWrite(() => setSent(true));
       afterWrite(() => setOpen(false));
     } catch (err) {
-      logFailure({ stage: 'create', status: err instanceof ApiError ? err.status : 1, errorName: 'ReportFailed' });
+      logFailure(err instanceof ApiError ? { stage: 'create', status: err.status, errorName: 'ReportFailed' } : { stage: 'create', status: 1, errorName: 'NetworkError' });
       setError(message(err));
     } finally {
       setBusy(false);
