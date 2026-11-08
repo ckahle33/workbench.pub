@@ -33,11 +33,14 @@ const COLLECTIONS: readonly string[] = [
   'pub.workbench.follow',
 ] satisfies Collection[];
 
+/** 'rejected' is a bad or hostile record; 'error' is a D1 failure, so the caller must not move past the event. */
+export type ApplyOutcome = 'applied' | 'ignored' | 'rejected' | 'error';
+
 export async function applyEvent(
   db: D1Database,
   ev: JetstreamEvent,
   nowMs: number,
-): Promise<'applied' | 'ignored' | 'rejected'> {
+): Promise<ApplyOutcome> {
   try {
     const c = ev.kind === 'commit' ? ev.commit : undefined;
     if (!c || !COLLECTIONS.includes(c.collection)) return 'ignored';
@@ -52,17 +55,23 @@ export async function applyEvent(
 
     const collection = c.collection as Collection;
     const meta = { uri, did: ev.did, rkey: c.rkey, indexedAt: nowMs };
-    let record = c.record;
-    if (collection === 'pub.workbench.topic' && typeof record === 'object' && record !== null) {
-      // The validator wants a canonical slug; fold case/whitespace variants onto it first.
-      const raw = (record as { slug?: unknown }).slug;
-      if (typeof raw === 'string') {
-        const slug = normalizeSlug(raw);
-        if (slug === null) return 'rejected';
-        record = { ...record, slug };
+    // Validation is pure; if it throws on a hostile record, that is the record's fault, not D1's.
+    let v: ReturnType<typeof validateRecord>;
+    try {
+      let record = c.record;
+      if (collection === 'pub.workbench.topic' && typeof record === 'object' && record !== null) {
+        // The validator wants a canonical slug; fold case/whitespace variants onto it first.
+        const raw = (record as { slug?: unknown }).slug;
+        if (typeof raw === 'string') {
+          const slug = normalizeSlug(raw);
+          if (slug === null) return 'rejected';
+          record = { ...record, slug };
+        }
       }
+      v = validateRecord(collection, record);
+    } catch {
+      return 'rejected';
     }
-    const v = validateRecord(collection, record);
     if (!v.ok) return 'rejected';
 
     switch (collection) {
@@ -86,6 +95,6 @@ export async function applyEvent(
     }
     return 'applied';
   } catch {
-    return 'rejected';
+    return 'error';
   }
 }

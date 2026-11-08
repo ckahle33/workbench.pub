@@ -23,6 +23,21 @@ Verified 2026-11-07. Pinned versions: vitest 4.1.x (@cloudflare/vitest-plugin 1.
 ## Tests
 
 `vitest.workspace.ts` defines three projects: `node` (shared/, ingest/, scripts/), `workers` (D1 tests in the
-Workers runtime: `shared/db.test.ts`, `ingest/src/apply.test.ts`, `functions/**`; applies `migrations/` when
+Workers runtime: `shared/db.test.ts`, `ingest/src/apply.test.ts`, `ingest/src/drain.test.ts`, `functions/**`; applies `migrations/` when
 it exists) and `jsdom` (React, `src/`). Vitest 4 has no workspace file, so `vitest.config.ts` loads it as
 `test.projects`.
+
+## Jetstream drain (ingest/)
+
+The cron Worker (`*/5 * * * *`) connects to `wss://jetstream2.us-east.bsky.network/subscribe` with
+`wantedCollections=pub.workbench.*&cursor=<saved time_us minus 5s>`, applies events, stores the highest
+`time_us` seen, and disconnects after 3 s of silence or 20 s total. It stops without advancing the cursor
+past an event if D1 fails. A saved cursor that fails immediately triggers one retry without a cursor and
+`gap: true` in the log.
+
+Verified 2026-11-07 against https://bsky.network/docs/jetstream/ and a live `wrangler dev --test-scheduled` run:
+the docs list `jetstream2.us-east.bsky.network` and `jetstream1.us-west.bsky.network` as v1 hosts and describe a
+newer Jetstream v2 (`jetstream.us-east.bsky.network`, recommended for new projects, params `collections`/`dids`/`kinds`/`cursor`,
+`seq` cursors, replay only on v2, a bounded lookback window of unstated length). The docs do not document v1 params, so
+`wantedCollections` and microsecond `cursor` are unconfirmed in text; they work in practice on the v1 host (a live run
+returned a handful of events in 3 s, i.e. filtering is applied, and stored a `time_us` cursor). Revisit moving to v2.

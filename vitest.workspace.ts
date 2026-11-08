@@ -6,7 +6,7 @@ import { defineConfig, type TestProjectConfiguration } from 'vitest/config';
 
 // Tests that need the Workers runtime and a D1 database. Everything else under
 // shared/, ingest/ and scripts/ runs in plain Node.
-const workersTests = ['shared/db.test.ts', 'ingest/src/apply.test.ts', 'functions/**/*.test.ts'];
+const workersTests = ['shared/db.test.ts', 'ingest/src/apply.test.ts', 'ingest/src/drain.test.ts', 'functions/**/*.test.ts'];
 
 const migrationsDir = fileURLToPath(new URL('./migrations', import.meta.url));
 

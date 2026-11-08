@@ -145,4 +145,10 @@ describe('applyEvent', () => {
     expect(await applyEvent(db, { did: A, time_us: 1, kind: 'identity' }, NOW)).toBe('ignored');
     expect(await count('ingest_counts')).toBe(0);
   });
+
+  it('returns error (not rejected) when D1 throws', async () => {
+    const broken = { prepare: () => { throw new Error('D1 down'); } } as unknown as D1Database;
+    const ev = commit(A, 'create', P, 'p1', project('t'));
+    expect(await applyEvent(broken, ev, NOW)).toBe('error');
+  });
 });
