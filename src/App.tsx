@@ -38,21 +38,21 @@ function SiteHeader() {
             Latest
           </NavLink>
           {!loading && session && (
-            <NavLink to={`/profile/${session.did}`} dir="auto">
-              @{session.handle}
-            </NavLink>
+            <>
+              <NavLink to={`/profile/${session.did}`} dir="auto">
+                @{session.handle}
+              </NavLink>
+              <button type="button" className="btn-text" onClick={() => void signOut()}>
+                Sign out
+              </button>
+            </>
           )}
         </nav>
         <div className="header-actions">
           {loading ? null : session ? (
-            <>
-              <button type="button" className="btn-text" onClick={() => void signOut()}>
-                Sign out
-              </button>
-              <NavLink to="/new" className="btn btn-primary">
-                New project
-              </NavLink>
-            </>
+            <NavLink to="/new" className="btn btn-primary">
+              New project
+            </NavLink>
           ) : (
             <NavLink to="/signin">Sign in</NavLink>
           )}

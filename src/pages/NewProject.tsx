@@ -60,8 +60,9 @@ export function NewProject() {
   }
 
   return (
-    <form ref={formRef} onSubmit={(e) => void onSubmit(e)} noValidate className="composer">
+    <form ref={formRef} onSubmit={(e) => void onSubmit(e)} noValidate className="composer form-page">
       <h1>New project</h1>
+      <p className="form-intro">A project is the thing you are making. You add dated updates to it as the work goes on.</p>
       <TextField label="Title" value={title} onChange={setTitle} max={LIMITS.title} error={errors.title} />
       <TextField label="Summary" value={summary} onChange={setSummary} max={LIMITS.summary} multiline error={errors.summary} />
       <div className="field">
@@ -75,10 +76,12 @@ export function NewProject() {
         </select>
       </div>
       <TopicSelector value={topic} onChange={setTopic} error={errors.topic} />
-      <FieldError id="submit-error">{submitError}</FieldError>
-      <button type="submit" aria-disabled={busy || undefined}>
-        {busy ? 'Creating…' : 'Create project'}
-      </button>
+      <div className="form-submit">
+        <FieldError id="submit-error">{submitError}</FieldError>
+        <button type="submit" aria-disabled={busy || undefined}>
+          {busy ? 'Creating…' : 'Create project'}
+        </button>
+      </div>
     </form>
   );
 }

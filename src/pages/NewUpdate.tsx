@@ -50,10 +50,10 @@ export function NewUpdate() {
   if (!session) return <SignInPrompt what="add an update" />;
   if (session.did !== did) {
     return (
-      <section>
+      <section className="form-page">
         <h1>Add update</h1>
-        <p role="alert">You can only add updates to your own projects.</p>
-        <p>
+        <p role="alert" className="state-error">You can only add updates to your own projects.</p>
+        <p className="form-intro">
           <Link to={`/p/${did}/${rkey}`}>Back to the project</Link>
         </p>
       </section>
@@ -130,20 +130,22 @@ export function NewUpdate() {
   }
 
   return (
-    <form ref={formRef} onSubmit={(e) => void onSubmit(e)} noValidate className="composer">
+    <form ref={formRef} onSubmit={(e) => void onSubmit(e)} noValidate className="composer form-page">
       <h1>Add update</h1>
-      <p>
-        <Link to={`/p/${did}/${rkey}`}>Back to the project</Link>
+      <p className="form-intro">
+        A dated step in the timeline: what you did, what changed, what went wrong. <Link to={`/p/${did}/${rkey}`}>Back to the project</Link>
       </p>
       <TextField label="Heading" value={heading} onChange={setHeading} max={LIMITS.heading} error={errors.heading} />
       <TextField label="Notes" value={body} onChange={setBody} max={LIMITS.body} multiline error={errors.body} />
       <ImagePicker images={images} onChange={setImages} showErrors={showAltErrors} />
       <LinkList rows={links} onChange={setLinks} errors={linkErrors} />
       <PartsList rows={parts} onChange={setParts} errors={partErrors} />
-      <FieldError id="submit-error">{submitError}</FieldError>
-      <button type="submit" aria-disabled={busy || undefined}>
-        {busy ? 'Posting…' : 'Post update'}
-      </button>
+      <div className="form-submit">
+        <FieldError id="submit-error">{submitError}</FieldError>
+        <button type="submit" aria-disabled={busy || undefined}>
+          {busy ? 'Posting…' : 'Post update'}
+        </button>
+      </div>
     </form>
   );
 }

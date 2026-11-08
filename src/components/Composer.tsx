@@ -21,12 +21,14 @@ export function focusFirstInvalid(form: HTMLElement | null): void {
 
 export function SignInPrompt({ what }: { what: string }) {
   return (
-    <section aria-labelledby="signin-h">
+    <section aria-labelledby="signin-h" className="form-page">
       <h1 id="signin-h">Sign in to {what}</h1>
-      <p>You need to sign in with your AT Protocol account first.</p>
-      <p>
-        <Link to="/signin">Sign in</Link>
-      </p>
+      <div className="state-panel">
+        <p>You need to sign in with your AT Protocol account first.</p>
+        <Link to="/signin" className="btn btn-primary">
+          Sign in
+        </Link>
+      </div>
     </section>
   );
 }
@@ -69,7 +71,7 @@ export function TextField({ label, value, onChange, max, multiline, error, hint,
     <div className="field">
       <label htmlFor={id}>{label}</label>
       {hint && (
-        <p id={`${id}-hint`} className="meta">
+        <p id={`${id}-hint`} className="helper">
           {hint}
         </p>
       )}
@@ -91,7 +93,7 @@ export function TextField({ label, value, onChange, max, multiline, error, hint,
           }
         />
       )}
-      <p id={`${id}-count`} className="meta">
+      <p id={`${id}-count`} className="field-count">
         {max - value.length} characters left
       </p>
       <FieldError id={`${id}-err`}>{error}</FieldError>
@@ -136,7 +138,7 @@ export function ImagePicker({ images, onChange, showErrors }: { images: PickedIm
     <fieldset className="field">
       <legend>Photos</legend>
       <label htmlFor={inputId}>Add photos</label>
-      <p className="meta">
+      <p className="helper">
         Up to {LIMITS.images} photos (JPEG, PNG, WebP or GIF). Each needs a short description for people who cannot see it.
       </p>
       <input
@@ -156,8 +158,8 @@ export function ImagePicker({ images, onChange, showErrors }: { images: PickedIm
           const missing = showErrors && img.alt.trim() === '';
           const altId = `${inputId}-alt-${img.id}`;
           return (
-            <li key={img.id}>
-              <p className="meta">{img.file.name}</p>
+            <li key={img.id} className="row row-photo">
+              <p className="row-label">{img.file.name}</p>
               <label htmlFor={altId}>{`Alt text for photo ${i + 1} (${img.file.name})`}</label>
               <input
                 id={altId}
@@ -170,7 +172,7 @@ export function ImagePicker({ images, onChange, showErrors }: { images: PickedIm
                 onChange={(e) => onChange(images.map((x) => (x.id === img.id ? { ...x, alt: e.target.value } : x)))}
               />
               <FieldError id={`${altId}-err`}>{missing ? `Alt text is required for photo ${i + 1}.` : null}</FieldError>
-              <button type="button" onClick={() => onChange(images.filter((x) => x.id !== img.id))}>
+              <button type="button" className="btn-small" onClick={() => onChange(images.filter((x) => x.id !== img.id))}>
                 {`Remove photo ${i + 1}`}
               </button>
             </li>
@@ -213,30 +215,34 @@ export function LinkList({ rows, onChange, errors }: { rows: LinkRow[]; onChange
       <legend>Links</legend>
       <ul className="composer-list">
         {rows.map((r, i) => (
-          <li key={r.id}>
-            <label htmlFor={`${base}-u${r.id}`}>{`Link ${i + 1} address`}</label>
-            <input
-              id={`${base}-u${r.id}`}
-              type="url"
-              inputMode="url"
-              maxLength={2048}
-              value={r.url}
-              placeholder="https://"
-              aria-invalid={errors[r.id] ? true : undefined}
-              aria-describedby={errors[r.id] ? `${base}-e${r.id}` : undefined}
-              onChange={(e) => set(r.id, { url: e.target.value })}
-            />
-            <label htmlFor={`${base}-t${r.id}`}>{`Link ${i + 1} title (optional)`}</label>
-            <input id={`${base}-t${r.id}`} type="text" maxLength={LIMITS.title} value={r.title} dir="auto" onChange={(e) => set(r.id, { title: e.target.value })} />
+          <li key={r.id} className="row row-link">
+            <div className="subfield">
+              <label htmlFor={`${base}-u${r.id}`}>{`Link ${i + 1} address`}</label>
+              <input
+                id={`${base}-u${r.id}`}
+                type="url"
+                inputMode="url"
+                maxLength={2048}
+                value={r.url}
+                placeholder="https://"
+                aria-invalid={errors[r.id] ? true : undefined}
+                aria-describedby={errors[r.id] ? `${base}-e${r.id}` : undefined}
+                onChange={(e) => set(r.id, { url: e.target.value })}
+              />
+            </div>
+            <div className="subfield">
+              <label htmlFor={`${base}-t${r.id}`}>{`Link ${i + 1} title (optional)`}</label>
+              <input id={`${base}-t${r.id}`} type="text" maxLength={LIMITS.title} value={r.title} dir="auto" onChange={(e) => set(r.id, { title: e.target.value })} />
+            </div>
             <FieldError id={`${base}-e${r.id}`}>{errors[r.id]}</FieldError>
-            <button type="button" onClick={() => onChange(rows.filter((x) => x.id !== r.id))}>{`Remove link ${i + 1}`}</button>
+            <button type="button" className="btn-small" onClick={() => onChange(rows.filter((x) => x.id !== r.id))}>{`Remove link ${i + 1}`}</button>
           </li>
         ))}
       </ul>
-      <button type="button" disabled={rows.length >= LIMITS.links} onClick={() => onChange([...rows, newLinkRow()])}>
+      <button type="button" className="btn-add" disabled={rows.length >= LIMITS.links} onClick={() => onChange([...rows, newLinkRow()])}>
         Add link
       </button>
-      {rows.length >= LIMITS.links && <p className="meta">Up to {LIMITS.links} links.</p>}
+      {rows.length >= LIMITS.links && <p className="helper">Up to {LIMITS.links} links.</p>}
     </fieldset>
   );
 }
@@ -273,22 +279,28 @@ export function PartsList({ rows, onChange, errors }: { rows: PartRow[]; onChang
       <legend>Parts</legend>
       <ul className="composer-list">
         {rows.map((r, i) => (
-          <li key={r.id}>
-            <label htmlFor={`${base}-i${r.id}`}>{`Part ${i + 1} item`}</label>
-            <input id={`${base}-i${r.id}`} type="text" maxLength={LIMITS.title} value={r.item} dir="auto" aria-invalid={errors[r.id] ? true : undefined} aria-describedby={errors[r.id] ? `${base}-e${r.id}` : undefined} onChange={(e) => set(r.id, { item: e.target.value })} />
-            <label htmlFor={`${base}-q${r.id}`}>{`Part ${i + 1} quantity`}</label>
-            <input id={`${base}-q${r.id}`} type="text" maxLength={40} value={r.quantity} dir="auto" aria-invalid={errors[r.id] ? true : undefined} aria-describedby={errors[r.id] ? `${base}-e${r.id}` : undefined} onChange={(e) => set(r.id, { quantity: e.target.value })} />
-            <label htmlFor={`${base}-n${r.id}`}>{`Part ${i + 1} note (optional)`}</label>
-            <input id={`${base}-n${r.id}`} type="text" maxLength={LIMITS.summary} value={r.note} dir="auto" onChange={(e) => set(r.id, { note: e.target.value })} />
+          <li key={r.id} className="row row-part">
+            <div className="subfield">
+              <label htmlFor={`${base}-i${r.id}`}>{`Part ${i + 1} item`}</label>
+              <input id={`${base}-i${r.id}`} type="text" maxLength={LIMITS.title} value={r.item} dir="auto" aria-invalid={errors[r.id] ? true : undefined} aria-describedby={errors[r.id] ? `${base}-e${r.id}` : undefined} onChange={(e) => set(r.id, { item: e.target.value })} />
+            </div>
+            <div className="subfield">
+              <label htmlFor={`${base}-q${r.id}`}>{`Part ${i + 1} quantity`}</label>
+              <input id={`${base}-q${r.id}`} type="text" maxLength={40} value={r.quantity} dir="auto" aria-invalid={errors[r.id] ? true : undefined} aria-describedby={errors[r.id] ? `${base}-e${r.id}` : undefined} onChange={(e) => set(r.id, { quantity: e.target.value })} />
+            </div>
+            <div className="subfield">
+              <label htmlFor={`${base}-n${r.id}`}>{`Part ${i + 1} note (optional)`}</label>
+              <input id={`${base}-n${r.id}`} type="text" maxLength={LIMITS.summary} value={r.note} dir="auto" onChange={(e) => set(r.id, { note: e.target.value })} />
+            </div>
             <FieldError id={`${base}-e${r.id}`}>{errors[r.id]}</FieldError>
-            <button type="button" onClick={() => onChange(rows.filter((x) => x.id !== r.id))}>{`Remove part ${i + 1}`}</button>
+            <button type="button" className="btn-small" onClick={() => onChange(rows.filter((x) => x.id !== r.id))}>{`Remove part ${i + 1}`}</button>
           </li>
         ))}
       </ul>
-      <button type="button" disabled={rows.length >= LIMITS.parts} onClick={() => onChange([...rows, newPartRow()])}>
+      <button type="button" className="btn-add" disabled={rows.length >= LIMITS.parts} onClick={() => onChange([...rows, newPartRow()])}>
         Add part
       </button>
-      {rows.length >= LIMITS.parts && <p className="meta">Up to {LIMITS.parts} parts.</p>}
+      {rows.length >= LIMITS.parts && <p className="helper">Up to {LIMITS.parts} parts.</p>}
     </fieldset>
   );
 }
@@ -373,7 +385,7 @@ export function TopicSelector({ value, onChange, error }: { value: string | null
         <option value={NEW_TOPIC}>Create a new topic…</option>
       </select>
       <LoadMore label="Load more topics" hasMore={list.hasMore} loading={list.loadingMore} failed={list.moreFailed} onClick={list.loadMore} />
-      {value && !creating && <p className="meta">Topic that will be used: #{value}</p>}
+      {value && !creating && <p className="helper">Topic that will be used: #{value}</p>}
       <FieldError id={`${id}-err`}>{error}</FieldError>
       {creating && (
         <div className="subform">
@@ -385,8 +397,8 @@ export function TopicSelector({ value, onChange, error }: { value: string | null
             error={createError ?? undefined}
             onEnter={() => void create()}
           />
-          <p className="meta">{previewSlug ? <>Slug that will be used: #{previewSlug}</> : 'Slug that will be used: (enter 2 to 40 letters or numbers)'}</p>
-          <button type="button" aria-disabled={busy || undefined} onClick={() => void create()}>
+          <p className="helper">{previewSlug ? <>Slug that will be used: #{previewSlug}</> : 'Slug that will be used: (enter 2 to 40 letters or numbers)'}</p>
+          <button type="button" className="btn-primary" aria-disabled={busy || undefined} onClick={() => void create()}>
             {busy ? 'Creating…' : 'Create topic'}
           </button>
         </div>

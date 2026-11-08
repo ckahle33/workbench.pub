@@ -43,6 +43,9 @@
 .wordmark:hover { color: var(--ink); }
 .wordmark .dot { color: var(--accent); }
 
+.site-nav .btn-text, .site-nav a, .header-actions { white-space: nowrap; }
+.site-nav a[dir] { white-space: normal; }
+.site-nav .btn-text { min-height: 44px; font-size: 15px; text-decoration-thickness: 1px; }
 .site-nav { grid-area: nav; display: flex; flex-wrap: wrap; align-items: center; gap: 0 28px; min-width: 0; }
 .site-nav a, .header-actions a:not(.btn) {
   display: inline-flex;

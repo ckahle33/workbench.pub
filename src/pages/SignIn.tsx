@@ -36,33 +36,42 @@ export function SignIn() {
   }
 
   return (
-    <div>
+    <div className="form-page signin">
       <h1>Sign in</h1>
-      <form onSubmit={onSubmit} noValidate>
+      <p className="form-intro">
+        Use your Bluesky or other AT Protocol account. Your projects are saved in that account, not on this site.
+      </p>
+      <form onSubmit={onSubmit} noValidate className="signin-form">
         <label htmlFor="handle">Your AT Protocol handle</label>
-        <input
-          id="handle"
-          name="handle"
-          type="text"
-          inputMode="url"
-          autoComplete="username"
-          autoCapitalize="none"
-          autoCorrect="off"
-          spellCheck={false}
-          placeholder="alice.bsky.social"
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          aria-invalid={error ? true : undefined}
-          aria-describedby={error ? 'handle-error' : undefined}
-        />
-        {error && (
-          <p id="handle-error" role="alert">
+        <div className="signin-row">
+          <input
+            id="handle"
+            name="handle"
+            type="text"
+            inputMode="url"
+            autoComplete="username"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            placeholder="alice.bsky.social"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            aria-invalid={error ? true : undefined}
+            aria-describedby={error ? 'handle-error' : 'handle-help'}
+          />
+          <button type="submit" disabled={busy || loading}>
+            {busy ? 'Redirecting...' : 'Sign in'}
+          </button>
+        </div>
+        {error ? (
+          <p id="handle-error" role="alert" className="field-error">
             {error}
           </p>
+        ) : (
+          <p id="handle-help" className="helper signin-help">
+            For example alice.bsky.social, or a DID.
+          </p>
         )}
-        <button type="submit" disabled={busy || loading}>
-          {busy ? 'Redirecting...' : 'Sign in'}
-        </button>
       </form>
     </div>
   );
