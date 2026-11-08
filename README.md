@@ -134,7 +134,7 @@ Consequence for the ingest Worker: the 50 query limit and the 10 ms CPU limit ar
 1. Open https://workbench.pub in a private window; `/topics/electronics` and a hard refresh on it must load the app.
 2. Sign in with a real account. If the PDS rejects the scopes, see risk 1.
 3. Create a topic and a project; post an update with a photo and a GitHub link.
-4. Wait one cron interval (one minute, plus up to 15 minutes the first time for the cron to propagate). Check `npx wrangler tail workbench-ingest --format pretty` for a `jetstream drain` line with `events > 0`.
+4. Wait one cron interval (one minute, plus up to 15 minutes the first time for the cron to propagate). Check `npx wrangler tail workbench-ingest --format pretty` for a `jetstream drain` line with `applied > 0` (`ignored` counts identity/account and foreign traffic and does not prove indexing). Also check the CPU time of the cron invocation in the dashboard (Workers & Pages, workbench-ingest, Metrics or the invocation logs): it must stay under the 10 ms Free limit. A line `jetstream drain stopped on a D1 error (errored runs in a row: N)` with N growing means a poison event: the preceding `ingest apply error` line names the error and the event's uri and collection.
 5. In a signed-out window the project, update and photo appear.
 6. Report and admin (use an environment variable so the token never appears in shell history files via a literal; `read -s` keeps it off the screen):
 

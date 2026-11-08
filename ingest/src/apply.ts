@@ -98,7 +98,14 @@ export async function applyEvent(
         break;
     }
     return 'applied';
-  } catch {
+  } catch (err) {
+    // A poison event must be visible to an operator: error name and where it lives, never the record contents.
+    const c = ev.kind === 'commit' ? ev.commit : undefined;
+    console.error('ingest apply error', {
+      name: err instanceof Error ? err.name : 'unknown',
+      uri: c ? `at://${ev.did}/${c.collection}/${c.rkey}` : undefined,
+      collection: c?.collection,
+    });
     return 'error';
   }
 }

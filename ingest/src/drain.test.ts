@@ -82,7 +82,7 @@ describe('drainJetstream', () => {
     const r = await run(h.connect);
     expect(h.sockets).toHaveLength(1);
     expect(h.sockets[0].url).toBe(`${BASE}&cursor=5000000`);
-    expect(r).toEqual({ events: 3, cursor: 13_000_000, gap: false, errored: false, capped: false });
+    expect(r).toEqual({ applied: 2, rejected: 0, ignored: 1, cursor: 13_000_000, gap: false, errored: false, errorStreak: 0, capped: false, caughtUp: false });
     expect(await getCursor(db)).toBe(13_000_000);
     const n = await db.prepare('SELECT COUNT(*) AS n FROM projects').first<{ n: number }>();
     expect(n?.n).toBe(2);
@@ -118,7 +118,7 @@ describe('drainJetstream', () => {
     const started = Date.now();
     const r = await run(h.connect, 120, 1000);
     expect(Date.now() - started).toBeLessThan(900);
-    expect(r.events).toBeGreaterThan(0);
+    expect(r.ignored).toBeGreaterThan(0);
     expect(h.sockets[0].closed).toBe(true);
   });
 
@@ -129,14 +129,14 @@ describe('drainJetstream', () => {
         s.send(identity(5));
       },
     ]);
-    expect((await run(h.connect)).events).toBe(1);
+    expect(await run(h.connect)).toMatchObject({ applied: 0, rejected: 0, ignored: 1 });
   });
 
   it('without a saved cursor, an error before any message is a gap and leaves the cursor alone', async () => {
     const h = harness([(s) => s.emit('error')]);
     const r = await run(h.connect);
     expect(h.sockets).toHaveLength(1);
-    expect(r).toEqual({ events: 0, cursor: null, gap: true, errored: false, capped: false });
+    expect(r).toEqual({ applied: 0, rejected: 0, ignored: 0, cursor: null, gap: true, errored: false, errorStreak: 0, capped: false, caughtUp: false });
     expect(await getCursor(db)).toBeNull();
   });
 
@@ -145,7 +145,7 @@ describe('drainJetstream', () => {
     const h = harness([(s) => s.emit('close'), (s) => s.send(identity(99_000_000))]);
     const r = await run(h.connect);
     expect(h.sockets.map((s) => s.url)).toEqual([`${BASE}&cursor=5000000`, BASE]);
-    expect(r).toEqual({ events: 1, cursor: 99_000_000, gap: true, errored: false, capped: false });
+    expect(r).toEqual({ applied: 0, rejected: 0, ignored: 1, cursor: 99_000_000, gap: true, errored: false, errorStreak: 0, capped: false, caughtUp: false });
     expect(await getCursor(db)).toBe(99_000_000);
   });
 
@@ -154,7 +154,7 @@ describe('drainJetstream', () => {
     const h = harness([(s) => s.emit('error'), (s) => s.emit('close')]);
     const r = await run(h.connect);
     expect(h.sockets).toHaveLength(2);
-    expect(r).toEqual({ events: 0, cursor: 10_000_000, gap: true, errored: false, capped: false });
+    expect(r).toEqual({ applied: 0, rejected: 0, ignored: 0, cursor: 10_000_000, gap: true, errored: false, errorStreak: 0, capped: false, caughtUp: false });
     expect(await getCursor(db)).toBe(10_000_000);
   });
 
@@ -165,6 +165,7 @@ describe('drainJetstream', () => {
         s.send(project(2_000, 'p1'));
       },
     ]);
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     // A db whose prepare fails only for the project insert; cursor and block checks still work.
     const flaky = new Proxy(db, {
       get(target, prop) {
@@ -186,9 +187,16 @@ describe('drainJetstream', () => {
       idleMs: 30,
       nowMs: () => 1_800_000_000_000,
     });
-    expect(r).toEqual({ events: 1, cursor: 1_000, gap: false, errored: true, capped: false });
+    expect(r).toEqual({ applied: 0, rejected: 0, ignored: 1, cursor: 1_000, gap: false, errored: true, errorStreak: 1, capped: false, caughtUp: false });
+    expect(errSpy).toHaveBeenCalledWith('ingest apply error', {
+      name: 'Error',
+      uri: `at://${A}/pub.workbench.project/p1`,
+      collection: 'pub.workbench.project',
+    });
+    expect(JSON.stringify(errSpy.mock.calls)).not.toContain('robots'); // no record contents
     expect(await getCursor(db)).toBe(1_000);
     expect(h.sockets[0].closed).toBe(true);
+    errSpy.mockRestore();
   });
 
   it('a quiet but healthy connection is not a gap and does not retry', async () => {
@@ -196,7 +204,7 @@ describe('drainJetstream', () => {
     const h = harness([() => {}]);
     const r = await run(h.connect);
     expect(h.sockets).toHaveLength(1);
-    expect(r).toEqual({ events: 0, cursor: 10_000_000, gap: false, errored: false, capped: false });
+    expect(r).toEqual({ applied: 0, rejected: 0, ignored: 0, cursor: 10_000_000, gap: false, errored: false, errorStreak: 0, capped: false, caughtUp: false });
   });
 });
 
@@ -264,7 +272,7 @@ describe('drainJetstream query budget', () => {
     const h = harness([(s) => old.forEach((e) => s.send(e))]);
     const r = await drainWith(counted, h.connect);
     expect(state.count).toBe(1); // getCursor only
-    expect(r).toEqual({ events: 0, cursor: 100_000_000, gap: false, errored: false, capped: false });
+    expect(r).toEqual({ applied: 0, rejected: 0, ignored: 20, cursor: 100_000_000, gap: false, errored: false, errorStreak: 0, capped: false, caughtUp: false });
     expect((await db.prepare('SELECT COUNT(*) AS n FROM projects').first<{ n: number }>())?.n).toBe(0);
   });
 
@@ -272,7 +280,7 @@ describe('drainJetstream query budget', () => {
     await setCursor(db, 100_000_000);
     const h = harness([(s) => s.send(project(100_000_000, 'tie'))]);
     const r = await drainWith(db, h.connect);
-    expect(r.events).toBe(1);
+    expect(r.applied).toBe(1);
     expect((await db.prepare('SELECT COUNT(*) AS n FROM projects').first<{ n: number }>())?.n).toBe(1);
   });
 
@@ -323,22 +331,93 @@ describe('drainJetstream query budget', () => {
     expect((await db.prepare('SELECT COUNT(*) AS n FROM projects').first<{ n: number }>())?.n).toBe(3);
   });
 
-  it('exact boundary: 16 normal events use exactly 50 queries and are not capped; 17 are capped after 16', async () => {
+  it('exact boundary: 15 normal events use 47 D1 queries (+2 sockets reserved) and are not capped; 16 are capped after 15', async () => {
     const mk = (n: number) => Array.from({ length: n }, (_, i) => project(10_000_000 + i * 1_000_000, `b${i}`));
     {
       const { db: counted, state } = limited(db, 50);
-      const r = await drainWith(counted, harness([feed(mk(16))]).connect);
-      expect(r).toMatchObject({ events: 16, capped: false, errored: false });
-      expect(state.count).toBe(50);
+      const r = await drainWith(counted, harness([feed(mk(15))]).connect);
+      expect(r).toMatchObject({ applied: 15, capped: false, errored: false });
+      expect(state.count).toBe(47);
     }
     for (const t of ['projects', 'cursor', 'ingest_counts']) await db.prepare(`DELETE FROM ${t}`).run();
     {
       const { db: counted, state } = limited(db, 50);
-      const r = await drainWith(counted, harness([feed(mk(17))]).connect);
-      expect(r).toMatchObject({ events: 16, capped: true, errored: false });
-      expect(state.count).toBe(50);
-      expect((await db.prepare('SELECT COUNT(*) AS n FROM projects').first<{ n: number }>())?.n).toBe(16);
+      const r = await drainWith(counted, harness([feed(mk(16))]).connect);
+      expect(r).toMatchObject({ applied: 15, capped: true, errored: false });
+      expect(state.count).toBe(47);
+      expect(state.count + 2).toBeLessThanOrEqual(50); // with both possible sockets counted as subrequests
+      expect((await db.prepare('SELECT COUNT(*) AS n FROM projects').first<{ n: number }>())?.n).toBe(15);
     }
+  });
+
+  it('counts applied, rejected and ignored separately', async () => {
+    const bad = { ...project(3_000, 'bad'), commit: { ...project(3_000, 'bad').commit, record: { $type: 'pub.workbench.project' } } };
+    const foreign = { did: A, time_us: 4_000, kind: 'commit', commit: { operation: 'create', collection: 'app.bsky.feed.post', rkey: 'x', record: {} } };
+    const h = harness([feed([identity(1_000), project(2_000, 'ok'), bad, foreign])]);
+    expect(await drainWith(db, h.connect)).toMatchObject({ applied: 1, rejected: 1, ignored: 2, cursor: 4_000 });
+  });
+
+  it('stops as soon as events reach the time the run started, leaving that event for the next run', async () => {
+    const startMs = 1_800_000_000_000;
+    let sent = 0;
+    const h = harness([
+      (s) => {
+        s.send(project(startMs * 1000 - 2, 'before'));
+        s.send(identity(startMs * 1000 - 1));
+        s.send(project(startMs * 1000, 'live'));
+        sent = 3;
+        // Then keep the socket busy; a run that did not stop would sit here until maxMs.
+        const iv = setInterval(() => (s.closed ? clearInterval(iv) : s.send(identity(startMs * 1000 + 5))), 5);
+      },
+    ]);
+    const t0 = Date.now();
+    const r = await drainJetstream({ db, connect: h.connect, endpoint: ENDPOINT, maxMs: 5000, idleMs: 1000, nowMs: () => startMs });
+    expect(Date.now() - t0).toBeLessThan(1000);
+    expect(sent).toBe(3);
+    expect(r).toMatchObject({ applied: 1, ignored: 1, caughtUp: true, cursor: startMs * 1000 - 1 });
+    const rows = await db.prepare('SELECT rkey FROM projects').all<{ rkey: string }>();
+    expect(rows.results.map((x) => x.rkey)).toEqual(['before']);
+  });
+
+  it('never JSON.parses identity or account frames', async () => {
+    const parse = vi.spyOn(JSON, 'parse');
+    const h = harness([
+      (s) => {
+        for (let i = 0; i < 20; i++) s.send(identity(1_000 + i));
+        s.send({ did: A, time_us: 2_000, kind: 'account', account: { active: true } });
+        s.send(project(3_000, 'p'));
+      },
+    ]);
+    const r = await drainWith(db, h.connect);
+    // Jetstream frames only (D1's own response parsing also goes through JSON.parse).
+    const parsedFrames = parse.mock.calls.filter(([text]) => typeof text === 'string' && text.startsWith('{"did"'));
+    parse.mockRestore();
+    expect(parsedFrames).toHaveLength(1);
+    expect(r).toMatchObject({ applied: 1, ignored: 21, cursor: 3_000 });
+  });
+
+  it('keeps a streak of consecutive errored runs and resets it on a clean advancing run', async () => {
+    await setCursor(db, 1_000);
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const failing = new Proxy(db, {
+      get(target, prop) {
+        if (prop === 'prepare') {
+          return (sql: string) => {
+            if (sql.includes('INSERT INTO projects')) throw new Error('D1 down');
+            return target.prepare(sql);
+          };
+        }
+        const v = (target as any)[prop];
+        return typeof v === 'function' ? v.bind(target) : v;
+      },
+    });
+    const poison = feed([project(2_000, 'poison')]);
+    expect((await drainWith(failing, harness([poison]).connect)).errorStreak).toBe(1);
+    expect((await drainWith(failing, harness([poison]).connect)).errorStreak).toBe(2);
+    const ok = await drainWith(db, harness([poison]).connect);
+    expect(ok).toMatchObject({ errored: false, errorStreak: 0, applied: 1 });
+    expect((await drainWith(failing, harness([feed([project(3_000, 'again')])]).connect)).errorStreak).toBe(1);
+    errSpy.mockRestore();
   });
 
   it('countQueries counts without throwing when no limit is set', async () => {

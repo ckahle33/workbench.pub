@@ -18,7 +18,8 @@ export default {
     });
     if (r.gap) console.warn('jetstream gap: could not resume from the saved cursor', r);
     if (r.capped) console.warn('jetstream backlog: run hit the event budget, continuing next run', r);
-    if (r.errored) console.error('jetstream drain stopped on a D1 error', r);
+    // Counts and flags only; never record contents.
+    if (r.errored) console.error(`jetstream drain stopped on a D1 error (errored runs in a row: ${r.errorStreak})`, r);
     else console.log('jetstream drain', r);
   },
 };

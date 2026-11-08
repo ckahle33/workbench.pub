@@ -109,6 +109,33 @@ export async function setCursor(db: D1Database, timeUs: number): Promise<void> {
     .run();
 }
 
+/**
+ * Records the end of an ingest run in ONE query and returns the error streak (consecutive
+ * errored runs since the last run that advanced the cursor without error):
+ * - advanced, no error: store `timeUs`, reset the streak to 0;
+ * - advanced, errored: store `timeUs`, streak + 1;
+ * - not advanced, errored: streak + 1 (if no cursor row exists yet, nothing is stored; returns 1).
+ * The caller skips the call when the run neither advanced nor errored.
+ */
+export async function saveRunState(db: D1Database, timeUs: number | null, errored: boolean): Promise<number> {
+  if (timeUs === null) {
+    const row = await db
+      .prepare('UPDATE cursor SET error_streak = error_streak + 1 WHERE id = 1 RETURNING error_streak')
+      .first<{ error_streak: number }>();
+    return row?.error_streak ?? 1;
+  }
+  const row = await db
+    .prepare(
+      `INSERT INTO cursor (id, time_us, error_streak) VALUES (1, ?1, ?2)
+       ON CONFLICT(id) DO UPDATE SET time_us = excluded.time_us,
+         error_streak = CASE WHEN ?2 = 0 THEN 0 ELSE error_streak + 1 END
+       RETURNING error_streak`,
+    )
+    .bind(timeUs, errored ? 1 : 0)
+    .first<{ error_streak: number }>();
+  return row?.error_streak ?? (errored ? 1 : 0);
+}
+
 export async function isBlocked(db: D1Database, did: string): Promise<boolean> {
   const row = await db.prepare('SELECT 1 AS x FROM blocked_dids WHERE did = ?').bind(did).first();
   return row !== null;
