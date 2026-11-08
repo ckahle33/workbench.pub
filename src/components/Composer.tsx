@@ -14,6 +14,11 @@ export function writeErrorMessage(e: unknown): string {
   return e instanceof Error && /^Could not [\w ]+\.( Please try again\.)?$/.test(e.message) ? e.message : GENERIC_ERROR;
 }
 
+/** After a failed validation, move focus to the first invalid control (call after the errors have rendered). */
+export function focusFirstInvalid(form: HTMLElement | null): void {
+  form?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus();
+}
+
 export function SignInPrompt({ what }: { what: string }) {
   return (
     <section aria-labelledby="signin-h">
@@ -126,6 +131,8 @@ export function ImagePicker({ images, onChange, showErrors }: { images: PickedIm
         accept={IMAGE_TYPES.join(',')}
         multiple
         disabled={images.length >= LIMITS.images}
+        aria-invalid={pickError ? true : undefined}
+        aria-describedby={pickError ? `${inputId}-err` : undefined}
         onChange={(e) => onPick(e.target.files)}
       />
       <FieldError id={`${inputId}-err`}>{pickError}</FieldError>
@@ -255,7 +262,7 @@ export function PartsList({ rows, onChange, errors }: { rows: PartRow[]; onChang
             <label htmlFor={`${base}-i${r.id}`}>{`Part ${i + 1} item`}</label>
             <input id={`${base}-i${r.id}`} type="text" maxLength={LIMITS.title} value={r.item} dir="auto" aria-invalid={errors[r.id] ? true : undefined} aria-describedby={errors[r.id] ? `${base}-e${r.id}` : undefined} onChange={(e) => set(r.id, { item: e.target.value })} />
             <label htmlFor={`${base}-q${r.id}`}>{`Part ${i + 1} quantity`}</label>
-            <input id={`${base}-q${r.id}`} type="text" maxLength={40} value={r.quantity} dir="auto" aria-invalid={errors[r.id] ? true : undefined} onChange={(e) => set(r.id, { quantity: e.target.value })} />
+            <input id={`${base}-q${r.id}`} type="text" maxLength={40} value={r.quantity} dir="auto" aria-invalid={errors[r.id] ? true : undefined} aria-describedby={errors[r.id] ? `${base}-e${r.id}` : undefined} onChange={(e) => set(r.id, { quantity: e.target.value })} />
             <label htmlFor={`${base}-n${r.id}`}>{`Part ${i + 1} note (optional)`}</label>
             <input id={`${base}-n${r.id}`} type="text" maxLength={LIMITS.summary} value={r.note} dir="auto" onChange={(e) => set(r.id, { note: e.target.value })} />
             <FieldError id={`${base}-e${r.id}`}>{errors[r.id]}</FieldError>
@@ -354,9 +361,8 @@ export function TopicSelector({ value, onChange, error }: { value: string | null
       <FieldError id={`${id}-err`}>{error}</FieldError>
       {creating && (
         <div className="subform">
-          <TextField label="New topic name" value={name} onChange={setName} max={LIMITS.title} />
+          <TextField label="New topic name" value={name} onChange={setName} max={LIMITS.title} error={createError ?? undefined} />
           <p className="meta">{previewSlug ? <>Slug that will be used: #{previewSlug}</> : 'Slug that will be used: (enter 2 to 40 letters or numbers)'}</p>
-          <FieldError id={`${id}-create-err`}>{createError}</FieldError>
           <button type="button" disabled={busy} onClick={() => void create()}>
             {busy ? 'Creating…' : 'Create topic'}
           </button>

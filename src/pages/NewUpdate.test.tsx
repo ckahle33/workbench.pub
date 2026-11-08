@@ -130,4 +130,39 @@ describe('NewUpdate', () => {
     expect(await screen.findByText(/could not save to your pds/i)).toBeInTheDocument();
     await waitFor(() => expect(screen.getByRole('button', { name: /post update/i })).toBeEnabled());
   });
+
+  it('focuses the alt field of the image missing alt text', () => {
+    renderPage();
+    fill(/heading/i, 'h');
+    fill(/notes/i, 'n');
+    pick(png('a.png'), png('b.png'));
+    fill(/alt text for photo 1/i, 'ok');
+    submit();
+    expect(document.activeElement).toBe(screen.getByLabelText(/alt text for photo 2/i));
+  });
+
+  it('focuses the heading first, and ties errors to controls via aria-describedby', () => {
+    renderPage();
+    pick(new File(['x'], 'doc.pdf', { type: 'application/pdf' }));
+    const fileErr = screen.getByRole('alert');
+    expect(screen.getByLabelText(/add photos/i).getAttribute('aria-describedby')).toContain(fileErr.id);
+    fireEvent.click(screen.getByRole('button', { name: /add link/i }));
+    fill(/link 1 address/i, 'nope');
+    fireEvent.click(screen.getByRole('button', { name: /add part/i }));
+    fill(/part 1 item/i, 'Knob');
+    pick(png('a.png'));
+    submit();
+    expect(document.activeElement).toBe(screen.getByLabelText(/heading/i));
+    const alerts = screen.getAllByRole('alert');
+    const has = (label: RegExp, re: RegExp) => {
+      const err = alerts.find((a) => re.test(a.textContent ?? ''))!;
+      expect(screen.getByLabelText(label).getAttribute('aria-describedby')).toContain(err.id);
+    };
+    has(/heading/i, /heading/i);
+    has(/notes/i, /notes/i);
+    has(/alt text for photo 1/i, /alt text is required/i);
+    has(/link 1 address/i, /web address/i);
+    has(/part 1 quantity/i, /item and a quantity/i);
+    has(/part 1 item/i, /item and a quantity/i);
+  });
 });

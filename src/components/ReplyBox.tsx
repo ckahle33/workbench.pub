@@ -3,7 +3,7 @@ import { useSession } from '../auth/SessionContext';
 import { optimistic } from '../optimistic';
 import { createReply } from '../records/write';
 import { LIMITS } from '../../shared/lexicons';
-import { FieldError, TextField, writeErrorMessage } from './Composer';
+import { TextField, writeErrorMessage } from './Composer';
 
 /** Reply form for the signed-in user; renders nothing when signed out. */
 export function ReplyBox({ subjectUri }: { subjectUri: string }) {
@@ -36,8 +36,7 @@ export function ReplyBox({ subjectUri }: { subjectUri: string }) {
 
   return (
     <form onSubmit={(e) => void onSubmit(e)} noValidate className="reply-box">
-      <TextField label="Your reply" value={body} onChange={setBody} max={LIMITS.replyBody} multiline />
-      <FieldError id="reply-error">{error}</FieldError>
+      <TextField label="Your reply" value={body} onChange={setBody} max={LIMITS.replyBody} multiline error={error ?? undefined} />
       <button type="submit" disabled={busy}>
         {busy ? 'Posting…' : 'Post reply'}
       </button>

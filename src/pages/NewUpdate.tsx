@@ -1,9 +1,11 @@
-import { useState, type FormEvent } from 'react';
+import { useRef, useState, type FormEvent } from 'react';
+import { flushSync } from 'react-dom';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   cleanLinks,
   cleanParts,
   FieldError,
+  focusFirstInvalid,
   ImagePicker,
   LinkList,
   PartsList,
@@ -39,6 +41,7 @@ export function NewUpdate() {
   const [showAltErrors, setShowAltErrors] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const formRef = useRef<HTMLFormElement>(null);
 
   if (loading) return <Status kind="loading" />;
   if (!session) return <SignInPrompt what="add an update" />;
@@ -66,12 +69,18 @@ export function NewUpdate() {
       body: body.trim() ? undefined : 'Write a few notes.',
     };
     const altMissing = images.some((i) => i.alt.trim() === '');
-    setErrors(next);
-    setLinkErrors(l.errors);
-    setPartErrors(p.errors);
-    setShowAltErrors(true);
+    const invalid = !!(next.heading || next.body || altMissing || Object.keys(l.errors).length || Object.keys(p.errors).length);
     setSubmitError(null);
-    if (next.heading || next.body || altMissing || Object.keys(l.errors).length || Object.keys(p.errors).length) return;
+    flushSync(() => {
+      setErrors(next);
+      setLinkErrors(l.errors);
+      setPartErrors(p.errors);
+      setShowAltErrors(true);
+    });
+    if (invalid) {
+      focusFirstInvalid(formRef.current);
+      return;
+    }
 
     setBusy(true);
     try {
@@ -108,7 +117,7 @@ export function NewUpdate() {
   }
 
   return (
-    <form onSubmit={(e) => void onSubmit(e)} noValidate className="composer">
+    <form ref={formRef} onSubmit={(e) => void onSubmit(e)} noValidate className="composer">
       <h1>Add update</h1>
       <p>
         <Link to={`/p/${did}/${rkey}`}>Back to the project</Link>

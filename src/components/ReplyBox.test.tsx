@@ -30,6 +30,8 @@ describe('ReplyBox', () => {
     fireEvent.click(screen.getByRole('button', { name: /post reply/i }));
     expect(screen.getByRole('alert')).toHaveTextContent(/write something/i);
     expect(createReply).not.toHaveBeenCalled();
+    expect(box).toHaveAttribute('aria-invalid', 'true');
+    expect(box.getAttribute('aria-describedby')).toContain(screen.getByRole('alert').id);
     fireEvent.change(box, { target: { value: ' Nice build ' } });
     fireEvent.click(screen.getByRole('button', { name: /post reply/i }));
     await waitFor(() => expect(createReply).toHaveBeenCalledWith(h.session, { subject: SUBJECT, body: 'Nice build' }));

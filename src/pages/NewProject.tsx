@@ -1,6 +1,7 @@
-import { useState, type FormEvent } from 'react';
+import { useRef, useState, type FormEvent } from 'react';
+import { flushSync } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
-import { FieldError, SignInPrompt, TextField, TopicSelector, writeErrorMessage } from '../components/Composer';
+import { FieldError, focusFirstInvalid, SignInPrompt, TextField, TopicSelector, writeErrorMessage } from '../components/Composer';
 import { Status } from '../components/Status';
 import { useSession } from '../auth/SessionContext';
 import { useTitle } from '../hooks';
@@ -25,6 +26,7 @@ export function NewProject() {
   const [errors, setErrors] = useState<{ title?: string; summary?: string; topic?: string }>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const formRef = useRef<HTMLFormElement>(null);
 
   if (loading) return <Status kind="loading" />;
   if (!session) return <SignInPrompt what="start a project" />;
@@ -37,9 +39,13 @@ export function NewProject() {
       summary: summary.trim() ? undefined : 'Add a short summary.',
       topic: topic ? undefined : 'Choose a topic, or create a new one.',
     };
-    setErrors(next);
     setSubmitError(null);
-    if (next.title || next.summary || next.topic || !topic) return;
+    if (next.title || next.summary || next.topic || !topic) {
+      flushSync(() => setErrors(next));
+      focusFirstInvalid(formRef.current);
+      return;
+    }
+    setErrors(next);
     setBusy(true);
     try {
       const t = title.trim();
@@ -54,7 +60,7 @@ export function NewProject() {
   }
 
   return (
-    <form onSubmit={(e) => void onSubmit(e)} noValidate className="composer">
+    <form ref={formRef} onSubmit={(e) => void onSubmit(e)} noValidate className="composer">
       <h1>New project</h1>
       <TextField label="Title" value={title} onChange={setTitle} max={LIMITS.title} error={errors.title} />
       <TextField label="Summary" value={summary} onChange={setSummary} max={LIMITS.summary} multiline error={errors.summary} />

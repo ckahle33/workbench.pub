@@ -121,4 +121,45 @@ describe('NewProject', () => {
     fireEvent.click(await screen.findByRole('button', { name: /load more topics/i }));
     expect(await screen.findByRole('option', { name: /Zeta/ })).toBeInTheDocument();
   });
+
+  it('focuses the first invalid field after a failed submit: title, then topic', async () => {
+    renderPage();
+    await screen.findByRole('option', { name: /Synthesizers/ });
+    fireEvent.click(screen.getByRole('button', { name: /create project/i }));
+    expect(document.activeElement).toBe(screen.getByLabelText(/^title/i));
+    fill(/^title/i, 'T');
+    fill(/summary/i, 'S');
+    fireEvent.click(screen.getByRole('button', { name: /create project/i }));
+    expect(document.activeElement).toBe(screen.getByLabelText(/^topic/i));
+  });
+
+  it('ties every error to its control with aria-describedby', async () => {
+    renderPage();
+    await screen.findByRole('option', { name: /Synthesizers/ });
+    fireEvent.click(screen.getByRole('button', { name: /create project/i }));
+    for (const [label, re] of [[/^title/i, /title/i], [/summary/i, /summary/i], [/^topic/i, /topic/i]] as const) {
+      const control = screen.getByLabelText(label);
+      const err = screen.getAllByRole('alert').find((a) => re.test(a.textContent ?? ''))!;
+      expect(control).toHaveAttribute('aria-invalid', 'true');
+      expect(control.getAttribute('aria-describedby')).toContain(err.id);
+    }
+    fireEvent.change(screen.getByLabelText(/^topic/i), { target: { value: '__new__' } });
+    fireEvent.click(screen.getByRole('button', { name: /^create topic/i }));
+    const nameErr = screen.getAllByRole('alert').find((a) => /2 to 40/.test(a.textContent ?? ''))!;
+    expect(screen.getByLabelText(/new topic name/i).getAttribute('aria-describedby')).toContain(nameErr.id);
+  });
+
+  it('does not steal focus on a non-validation failure', async () => {
+    vi.mocked(createProject).mockRejectedValue(new Error('x'));
+    renderPage();
+    await screen.findByRole('option', { name: /Synthesizers/ });
+    fill(/^title/i, 'T');
+    fill(/summary/i, 'S');
+    fireEvent.change(screen.getByLabelText(/^topic/i), { target: { value: 'synths' } });
+    const btn = screen.getByRole('button', { name: /create project/i });
+    btn.focus();
+    fireEvent.click(btn);
+    await screen.findByText(/something went wrong/i);
+    expect(document.activeElement).toBe(btn);
+  });
 });
