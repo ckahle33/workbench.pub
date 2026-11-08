@@ -16,6 +16,10 @@ import {
 
 export interface Env {
   DB: D1Database;
+  /** Cloudflare secret (`wrangler secret put ADMIN_TOKEN`). Admin routes are closed while unset or empty. */
+  ADMIN_TOKEN?: string;
+  /** Optional secret salt for hashing reporter IPs. */
+  IP_HASH_SALT?: string;
 }
 
 export interface ReadOptions {

@@ -126,6 +126,46 @@ export async function hideUri(db: D1Database, uri: string): Promise<void> {
   await db.batch(CONTENT_TABLES.map((t) => db.prepare(`UPDATE ${t} SET hidden = 1 WHERE uri = ?`).bind(uri)));
 }
 
+export interface ReportRow {
+  id: number;
+  subjectUri: string;
+  reason: string;
+  createdAt: number;
+}
+
+/**
+ * Inserts a report unless `ipHash` already reported `uri` at or after `sinceMs`.
+ * One atomic statement, so concurrent duplicates cannot both land. True when inserted.
+ */
+export async function insertReportOncePerWindow(
+  db: D1Database,
+  r: { uri: string; reason: string; ipHash: string; nowMs: number; sinceMs: number },
+): Promise<boolean> {
+  const res = await db
+    .prepare(
+      `INSERT INTO reports (subject_uri, reason, ip_hash, created_at)
+       SELECT ?1, ?2, ?3, ?4
+       WHERE NOT EXISTS (SELECT 1 FROM reports WHERE ip_hash = ?3 AND subject_uri = ?1 AND created_at >= ?5)`,
+    )
+    .bind(r.uri, r.reason, r.ipHash, r.nowMs, r.sinceMs)
+    .run();
+  return res.meta.changes > 0;
+}
+
+/** Newest reports first. The reporter's ip_hash is deliberately not returned. */
+export async function listReports(db: D1Database, limit: number): Promise<ReportRow[]> {
+  const { results } = await db
+    .prepare('SELECT id, subject_uri, reason, created_at FROM reports ORDER BY created_at DESC, id DESC LIMIT ?')
+    .bind(limit)
+    .all<Record<string, unknown>>();
+  return results.map((r) => ({
+    id: r.id as number,
+    subjectUri: r.subject_uri as string,
+    reason: r.reason as string,
+    createdAt: r.created_at as number,
+  }));
+}
+
 /** Counts one ingest for `did` in the hour containing `nowMs`; true while within `cap`. */
 export async function bumpAndCheckRate(db: D1Database, did: string, nowMs: number, cap: number): Promise<boolean> {
   const hour = Math.floor(nowMs / HOUR_MS);

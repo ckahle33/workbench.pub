@@ -1,0 +1,4 @@
+# Copy to .dev.vars (gitignored) for local `wrangler dev`.
+ADMIN_TOKEN=
+# Optional: secret salt for hashing reporter IPs.
+IP_HASH_SALT=

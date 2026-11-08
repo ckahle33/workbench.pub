@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { adminRoutes } from './api/admin';
 import { blobRoutes } from './api/blob';
 import { cardRoutes } from './api/card';
 import { readRoutes, type Env } from './api/read';
@@ -9,5 +10,6 @@ const app = new Hono<{ Bindings: Env }>();
 app.route('/api', readRoutes());
 app.route('/api', cardRoutes());
 app.route('/api', blobRoutes());
+app.route('/api', adminRoutes());
 
 export default app;
