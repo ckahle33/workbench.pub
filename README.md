@@ -41,3 +41,30 @@ newer Jetstream v2 (`jetstream.us-east.bsky.network`, recommended for new projec
 `seq` cursors, replay only on v2, a bounded lookback window of unstated length). The docs do not document v1 params, so
 `wantedCollections` and microsecond `cursor` are unconfirmed in text; they work in practice on the v1 host (a live run
 returned a handful of events in 3 s, i.e. filtering is applied, and stored a `time_us` cursor). Revisit moving to v2.
+
+## Sign-in (AT Protocol OAuth)
+
+Public browser client (`@atproto/oauth-client-browser` 0.5.x, `BrowserOAuthClient`), no backend session and no secrets.
+Tokens are DPoP-bound and kept by the library in IndexedDB. `src/auth/oauth.ts` wraps the client (`signIn`,
+`restoreSession`, `signOut`); `src/auth/SessionContext.tsx` provides `useSession()`; `/signin` is the page.
+There is no separate callback route: the redirect URI is the site root (`https://workbench.pub/`), and
+`restoreSession()` runs on every app load and completes the login if the URL carries callback parameters.
+
+**Scope used (verified 2026-11-07 against https://atproto.com/specs/permission and /specs/oauth):**
+`atproto repo:pub.workbench.topic repo:pub.workbench.project repo:pub.workbench.update repo:pub.workbench.reply repo:pub.workbench.follow blob:image/*`.
+Granular `repo:` and `blob:` scopes are defined in the current permission spec, so `transition:generic` is not
+requested. The spec does not allow partial wildcards (`repo:pub.workbench.*` is invalid), so each collection is
+listed explicitly; adding a collection means updating `src/auth/config.ts` and `public/client-metadata.json`
+(a test checks they match). `blob:image/*` matches the lexicons' `image/*` blob accept. The spec does not say which
+authorization servers have shipped granular scopes. If a user's PDS rejects them, fall back to
+`atproto transition:generic` in both files. This was not tested against a live server.
+
+**`public/client-metadata.json`** (served at `https://workbench.pub/client-metadata.json`; `client_id` must equal that URL exactly):
+`client_id`, `client_name`, `client_uri`, `redirect_uris` = `["https://workbench.pub/"]`, `scope` (above),
+`response_types` = `["code"]`, `grant_types` = `["authorization_code","refresh_token"]`,
+`token_endpoint_auth_method` = `"none"`, `application_type` = `"web"`, `dpop_bound_access_tokens` = `true`.
+No `jwks`: that is only for confidential clients.
+
+**Development** uses the library's loopback mode: client id `http://localhost?scope=...&redirect_uri=http://127.0.0.1:<port>/`
+(built in `buildLoopbackClientId`). Open the dev server via `http://127.0.0.1:<port>/`; the library redirects `localhost` there.
+Any non-loopback origin other than workbench.pub (previews) will fail the redirect check.
