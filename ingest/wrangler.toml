@@ -11,4 +11,4 @@ crons = ["* * * * *"]
 [[d1_databases]]
 binding = "DB"
 database_name = "workbench"
-database_id = "00000000-0000-0000-0000-000000000000" # same database as the root wrangler.toml
+database_id = "48a9a751-fd75-4121-8db1-d97dd379d19a"
