@@ -196,3 +196,15 @@ button.btn-text:disabled, button.btn-text[aria-disabled='true'] { background: tr
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; animation: none !important; }
 }
+
+/* A disabled or busy button keeps its resting look on hover, for every variant (primary, text, danger, form submit).
+   Specificity (0,3,0) beats each variant's :hover rule. */
+:is(button, .btn)[aria-disabled='true']:hover, button:disabled:hover {
+  background: var(--paper);
+  border-color: var(--grey-light);
+  color: var(--muted);
+}
+:is(button.btn-primary, form button[type='submit'])[aria-disabled='true']:hover, :is(button.btn-primary, form button[type='submit']):disabled:hover {
+  background: var(--panel);
+}
+:is(button.btn-text)[aria-disabled='true']:hover, button.btn-text:disabled:hover { background: transparent; }
