@@ -14,6 +14,9 @@ const reply = (n: number, subject: string, body: string) => ({
   indexedAt: n,
 });
 
+const sess = vi.hoisted(() => ({ session: null as unknown }));
+vi.mock('../auth/SessionContext', () => ({ useSession: () => ({ session: sess.session, loading: false, signOut: vi.fn() }) }));
+
 function renderPage() {
   return render(
     <MemoryRouter initialEntries={[`/u/${ALICE}/u1`]}>
@@ -86,5 +89,23 @@ describe('Update page structure and pagination', () => {
     expect(await screen.findByText('second')).toBeInTheDocument();
     expect(screen.getAllByText('first')).toHaveLength(1);
     expect(fx.calls.at(-1)!.searchParams.get('cursor')).toBe('next');
+  });
+});
+
+describe('Update page reply box', () => {
+  afterEach(() => {
+    sess.session = null;
+  });
+
+  it('shows the reply box and report only as appropriate', async () => {
+    mockApi(() => ({ update: full, author: { did: ALICE }, items: [], cursor: null }));
+    const a = renderPage();
+    await screen.findByRole('heading', { level: 1, name: 'Soldered it' });
+    expect(screen.queryByLabelText(/your reply/i)).toBeNull();
+    expect(screen.getByRole('button', { name: /^report/i })).toBeInTheDocument();
+    a.unmount();
+    sess.session = { did: BOB, handle: 'bob.test', agent: {} };
+    renderPage();
+    expect(await screen.findByLabelText(/your reply/i)).toBeInTheDocument();
   });
 });

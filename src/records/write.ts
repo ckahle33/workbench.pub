@@ -95,7 +95,7 @@ export async function createUpdate(
     parts?: { item: string; quantity: string; note?: string }[];
   },
   o?: WriteOptions,
-): Promise<{ uri: string }> {
+): Promise<{ uri: string; images: ImageDef[] }> {
   if (i.images.length > LIMITS.images) throw new Error(`At most ${LIMITS.images} images per update`);
   if (i.images.some((img) => img.alt.trim() === '')) throw new Error('Every image needs alt text');
 
@@ -124,7 +124,7 @@ export async function createUpdate(
   const images: ImageDef[] = [];
   for (const img of i.images) images.push({ image: await upload(s, img.file), alt: img.alt });
   const record = checked('pub.workbench.update', build(images));
-  return { uri: await put(s, record.$type, record) };
+  return { uri: await put(s, record.$type, record), images };
 }
 
 export async function createReply(s: Session, i: { subject: string; body: string }, o?: WriteOptions) {

@@ -46,3 +46,22 @@ describe('App', () => {
     await vi.waitFor(() => expect(document.title).toMatch(/^Page not found/));
   });
 });
+
+describe('App writing routes', () => {
+  it('shows a New project link and the composer routes when signed in', async () => {
+    vi.mocked(restoreSession).mockResolvedValue({ did: 'did:plc:me', handle: 'me.test', agent: {} as never });
+    renderApp('/new');
+    expect(await screen.findByRole('link', { name: 'New project' })).toHaveAttribute('href', '/new');
+    expect(await screen.findByRole('heading', { level: 1, name: 'New project' })).toBeInTheDocument();
+  });
+
+  it('shows sign-in prompts on /new and the update route when signed out', async () => {
+    vi.mocked(restoreSession).mockResolvedValue(null);
+    const a = renderApp('/new');
+    expect(await screen.findByRole('heading', { name: /sign in to start a project/i })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'New project' })).toBeNull();
+    a.unmount();
+    renderApp('/p/did:plc:me/p1/update');
+    expect(await screen.findByRole('heading', { name: /sign in to add an update/i })).toBeInTheDocument();
+  });
+});

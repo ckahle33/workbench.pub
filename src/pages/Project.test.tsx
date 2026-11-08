@@ -4,6 +4,9 @@ import { optimistic } from '../optimistic';
 import { ALICE, image, mockApi, project, update } from '../testUtils';
 import { Project } from './Project';
 
+const sess = vi.hoisted(() => ({ session: null as unknown }));
+vi.mock('../auth/SessionContext', () => ({ useSession: () => ({ session: sess.session, loading: false, signOut: vi.fn() }) }));
+
 function renderPage() {
   return render(
     <MemoryRouter initialEntries={[`/p/${ALICE}/p1`]}>
@@ -160,5 +163,35 @@ describe('Project page pagination', () => {
     expect(names[0]).toBe('Mine');
     expect(fx.calls.at(-1)!.searchParams.get('cursor')).toBe('20:at://c');
     expect(screen.queryByRole('button', { name: /load more/i })).toBeNull();
+  });
+});
+
+describe('Project page controls', () => {
+  beforeEach(() => {
+    sess.session = null;
+  });
+
+  it('shows Add update only to the project author', async () => {
+    serve([update(1)]);
+    const a = renderPage();
+    await screen.findByRole('heading', { level: 1, name: 'Project 1' });
+    expect(screen.queryByRole('link', { name: /add update/i })).toBeNull();
+    a.unmount();
+    sess.session = { did: 'did:plc:bcdefghijklmnopqrstuvwxy', handle: 'bob.test', agent: {} };
+    const b = renderPage();
+    await screen.findByRole('heading', { level: 1, name: 'Project 1' });
+    expect(screen.queryByRole('link', { name: /add update/i })).toBeNull();
+    b.unmount();
+    sess.session = { did: ALICE, handle: 'alice.test', agent: {} };
+    renderPage();
+    expect(await screen.findByRole('link', { name: /add update/i })).toHaveAttribute('href', `/p/${ALICE}/p1/update`);
+  });
+
+  it('offers follow (by project uri) and report', async () => {
+    serve([]);
+    renderPage();
+    await screen.findByRole('heading', { level: 1, name: 'Project 1' });
+    expect(screen.getByRole('link', { name: /sign in to follow/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^report/i })).toBeInTheDocument();
   });
 });

@@ -6,6 +6,9 @@ import { Topic } from './Topic';
 const topic = { slug: 'synths', name: 'Synthesizers', description: 'Things that go beep' };
 const many = (from: number) => Array.from({ length: 20 }, (_, i) => project(from + i));
 
+const sess = vi.hoisted(() => ({ session: null as unknown }));
+vi.mock('../auth/SessionContext', () => ({ useSession: () => ({ session: sess.session, loading: false, signOut: vi.fn() }) }));
+
 function renderPage() {
   return render(
     <MemoryRouter initialEntries={['/t/synths']}>
@@ -44,5 +47,24 @@ describe('Topic', () => {
     mockApi(() => ({ topic, items: [], cursor: null }));
     renderPage();
     expect(await screen.findByText(/no projects yet/i)).toBeInTheDocument();
+  });
+});
+
+describe('Topic follow', () => {
+  afterEach(() => {
+    sess.session = null;
+  });
+
+  it('has a follow control', async () => {
+    mockApi(() => ({ topic, items: [], cursor: null }));
+    renderPage();
+    expect(await screen.findByRole('link', { name: /sign in to follow/i })).toBeInTheDocument();
+  });
+
+  it('shows a Follow button when signed in', async () => {
+    mockApi(() => ({ topic, items: [], cursor: null }));
+    sess.session = { did: 'did:plc:me', handle: 'me.test', agent: {} };
+    renderPage();
+    expect(await screen.findByRole('button', { name: 'Follow' })).toBeInTheDocument();
   });
 });

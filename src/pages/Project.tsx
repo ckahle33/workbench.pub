@@ -1,7 +1,10 @@
 import { useEffect } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import type { Author, Page, ProjectView, UpdateView } from '../api';
+import { useSession } from '../auth/SessionContext';
 import { AuthorName } from '../components/AuthorName';
+import { FollowButton } from '../components/FollowButton';
+import { ReportButton } from '../components/ReportButton';
 import { LoadMore, Status } from '../components/Status';
 import { StatusBadge } from '../components/StatusBadge';
 import { DateText, Timeline } from '../components/Timeline';
@@ -17,6 +20,7 @@ export function Project() {
   const { did = '', rkey = '' } = useParams();
   const list = usePaged<UpdateView, ProjectResponse>(`/api/projects/${encodeURIComponent(did)}/${encodeURIComponent(rkey)}`);
   const mine = useOptimistic();
+  const { session } = useSession();
   const uri = `at://${did}/pub.workbench.project/${rkey}`;
 
   // The server has caught up with some optimistic items: forget them.
@@ -48,6 +52,11 @@ export function Project() {
           <DateText iso={project.createdAt} />
         </p>
         <p dir="auto">{project.summary}</p>
+        <div className="actions">
+          {session?.did === project.did && <Link to={`/p/${did}/${rkey}/update`} className="button-link">Add update</Link>}
+          <FollowButton kind="project" subject={project.uri} />
+          <ReportButton uri={project.uri} />
+        </div>
       </header>
       {updates.length === 0 ? <Status kind="empty">No updates yet.</Status> : <Timeline updates={updates} />}
       <LoadMore label="Load more updates" hasMore={list.hasMore} loading={list.loadingMore} failed={list.moreFailed} onClick={list.loadMore} />

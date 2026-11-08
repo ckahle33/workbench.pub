@@ -2,6 +2,8 @@ import { useEffect } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import type { Author, FeedItem, Page, ReplyView } from '../api';
 import { AuthorName } from '../components/AuthorName';
+import { ReplyBox } from '../components/ReplyBox';
+import { ReportButton } from '../components/ReportButton';
 import { Replies } from '../components/Replies';
 import { LoadMore, Status } from '../components/Status';
 import { TimelineEntry } from '../components/Timeline';
@@ -38,9 +40,13 @@ export function Update() {
         In <Link to={`/p/${update.project.did}/${update.project.rkey}`} dir="auto">{update.project.title}</Link> by <AuthorName author={author} />
       </p>
       <TimelineEntry update={update} headingLevel={1} />
+      <div className="actions">
+        <ReportButton uri={update.uri} />
+      </div>
       <section aria-labelledby="replies-h">
         <h2 id="replies-h">Replies</h2>
         <Replies replies={replies} rootUri={update.uri} />
+        <ReplyBox subjectUri={update.uri} />
         <LoadMore label="Load more replies" hasMore={list.hasMore} loading={list.loadingMore} failed={list.moreFailed} onClick={list.loadMore} />
       </section>
     </>

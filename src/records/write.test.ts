@@ -46,7 +46,8 @@ describe('createUpdate', () => {
       }),
       { now: NOW },
     );
-    expect(res).toEqual({ uri: 'at://did:plc:me/x/new' });
+    expect(res.uri).toBe('at://did:plc:me/x/new');
+    expect(res.images.map((i) => i.alt)).toEqual(['one', 'two']);
     expect(uploadBlob).toHaveBeenCalledTimes(2);
     const arg = createRecord.mock.calls[0][0] as { repo: string; collection: string; record: Record<string, unknown> };
     expect(arg.repo).toBe('did:plc:me');

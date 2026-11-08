@@ -18,6 +18,15 @@ export const api = {
     if (!res.ok) throw new ApiError(res.status);
     return (await res.json()) as T;
   },
+  /** POST a JSON body. Resolves on 2xx, throws ApiError otherwise. */
+  async post(path: string, body: unknown): Promise<void> {
+    const res = await impl(path, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', accept: 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) throw new ApiError(res.status);
+  },
   /** Test seam: replace the fetch implementation; pass null to restore the default. */
   setFetch(fn: FetchFn | null): void {
     impl = fn ?? defaultFetch;

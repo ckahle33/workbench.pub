@@ -1,5 +1,7 @@
 import { Link, Route, Routes } from 'react-router-dom';
 import { useSession } from './auth/SessionContext';
+import { NewProject } from './pages/NewProject';
+import { NewUpdate } from './pages/NewUpdate';
 import { Home } from './pages/Home';
 import { Profile } from './pages/Profile';
 import { Project } from './pages/Project';
@@ -23,6 +25,7 @@ function SiteHeader() {
       <nav aria-label="Main">
         {loading ? null : session ? (
           <>
+            <Link to="/new">New project</Link>
             <Link to={`/profile/${session.did}`}>@{session.handle}</Link>
             <button type="button" onClick={() => void signOut()}>
               Sign out
@@ -48,6 +51,8 @@ export function App() {
           <Route path="/" element={<Home />} />
           <Route path="/t/:slug" element={<Topic />} />
           <Route path="/p/:did/:rkey" element={<Project />} />
+          <Route path="/p/:did/:rkey/update" element={<NewUpdate />} />
+          <Route path="/new" element={<NewProject />} />
           <Route path="/u/:did/:rkey" element={<Update />} />
           <Route path="/profile/:did" element={<Profile />} />
           <Route path="/signin" element={<SignIn />} />

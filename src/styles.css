@@ -184,3 +184,49 @@ button:disabled { cursor: default; opacity: 0.6; }
 @media (prefers-reduced-motion: reduce) {
   * { scroll-behavior: auto !important; transition: none !important; animation: none !important; }
 }
+
+/* Composers, replies, follow, report */
+.composer .field, .reply-box .field, .report .field { margin-block: 1rem; }
+.field label, fieldset legend { display: block; font-weight: 600; margin-block-end: 0.25rem; }
+fieldset.field { border: 1px solid var(--border); border-radius: var(--radius); padding: 0.5rem 1rem 1rem; }
+fieldset.field legend { padding-inline: 0.25rem; }
+input[type='text'], input[type='url'], textarea, select {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  font: inherit;
+  padding: 0.5rem 0.75rem;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+input[type='file'] { display: block; min-height: 44px; margin-block: 0.25rem; max-width: 100%; }
+input[aria-invalid='true'], textarea[aria-invalid='true'], select[aria-invalid='true'] { border-color: var(--warn); border-width: 2px; }
+.field .meta { margin-block: 0.25rem; }
+.field-error { color: var(--warn); font-weight: 600; margin-block: 0.25rem; }
+.composer-list { list-style: none; margin: 0; padding: 0; }
+.composer-list > li { border-block-start: 1px solid var(--border); padding-block: 0.75rem; }
+.composer-list > li > button { margin-block-start: 0.5rem; }
+.subform { border-inline-start: 3px solid var(--border); padding-inline-start: 1rem; margin-block-start: 0.5rem; }
+.composer button[type='submit'], .reply-box button[type='submit'], .report button[type='submit'] {
+  background: var(--accent);
+  color: var(--accent-text);
+  border-color: var(--accent);
+  font-weight: 600;
+}
+.actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; margin-block: 0.5rem; }
+.button-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: var(--accent-text);
+  text-decoration: none;
+  font-weight: 600;
+}
+.follow, .report { display: inline-block; }
+.reply-box { margin-block-start: 1rem; }

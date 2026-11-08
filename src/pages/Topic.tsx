@@ -1,5 +1,6 @@
 import { useParams } from 'react-router-dom';
 import type { Page, ProjectView, TopicInfo } from '../api';
+import { FollowButton } from '../components/FollowButton';
 import { ProjectList } from '../components/ProjectList';
 import { LoadMore, Status } from '../components/Status';
 import { usePaged, useTitle } from '../hooks';
@@ -25,6 +26,9 @@ export function Topic() {
     <>
       <h1 dir="auto">{topic.name}</h1>
       <p dir="auto">{topic.description}</p>
+      <div className="actions">
+        <FollowButton kind="topic" subject={topic.slug} />
+      </div>
       {projects.length === 0 ? <Status kind="empty">No projects yet.</Status> : <ProjectList projects={projects} />}
       <LoadMore hasMore={list.hasMore} loading={list.loadingMore} failed={list.moreFailed} onClick={list.loadMore} />
     </>
