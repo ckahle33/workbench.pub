@@ -329,11 +329,68 @@ describe('projects, updates, profiles', () => {
   });
 
   it('still succeeds with just the did when the profile fetch fails', async () => {
+    await seedProject(P1);
     const failing = readRoutes({ fetchFn: async () => { throw new Error('offline'); } });
     const res = await failing.request(`/profiles/${ALICE}`, {}, bindings);
     expect(res.status).toBe(200);
     expect(((await res.json()) as { profile: unknown }).profile).toEqual({ did: ALICE });
     const bad = readRoutes({ fetchFn: async () => new Response('no', { status: 500 }) });
     expect((await bad.request(`/profiles/${ALICE}`, {}, bindings)).status).toBe(200);
+  });
+
+  it('rejects a syntactically invalid DID with 400 and never fetches', async () => {
+    let calls = 0;
+    const local = readRoutes({ fetchFn: async () => { calls++; return Response.json({}); } });
+    for (const bad of ['nope', 'did:', 'did:plc', 'DID:plc:x', 'did:plc:a%20b']) {
+      expect((await local.request(`/profiles/${bad}`, {}, bindings)).status).toBe(400);
+    }
+    expect(calls).toBe(0);
+  });
+
+  it('returns 404 for a DID with no indexed content, without fetching or storing a profile', async () => {
+    let calls = 0;
+    const local = readRoutes({ fetchFn: async () => { calls++; return Response.json({ handle: 'x.test' }); } });
+    expect((await local.request('/profiles/did:plc:stranger', {}, bindings)).status).toBe(404);
+    expect(calls).toBe(0);
+    expect((await db.prepare('SELECT COUNT(*) AS n FROM profiles').first<{ n: number }>())!.n).toBe(0);
+  });
+
+  it('knows authors of indexed updates and replies even without projects', async () => {
+    await seedProject(P1);
+    await seedUpdate(P1, 'u1', 200, BOB); // Bob's update (not on his own project, but indexed)
+    await upsertReply(db, { uri: `at://did:plc:carol/pub.workbench.reply/r1`, did: 'did:plc:carol', rkey: 'r1', indexedAt: 5 }, {
+      $type: 'pub.workbench.reply', subject: updUri('u1'), body: 'hi', createdAt: '2026-01-01T00:00:00.000Z',
+    });
+    const local = readRoutes({ fetchFn: async () => Response.json({ handle: 'x.test' }) });
+    expect((await local.request(`/profiles/${BOB}`, {}, bindings)).status).toBe(200);
+    expect((await local.request('/profiles/did:plc:carol', {}, bindings)).status).toBe(200);
+    await hideUri(db, `at://did:plc:carol/pub.workbench.reply/r1`);
+    expect((await local.request('/profiles/did:plc:carol', {}, bindings)).status).toBe(404);
+  });
+
+  it('times out a hanging profile fetch, falls back to the did, and retries after at most 60s', async () => {
+    await seedProject(P1);
+    let calls = 0;
+    let sawSignal = false;
+    const local = readRoutes({
+      profileTimeoutMs: 20,
+      fetchFn: (_input, init) => {
+        calls++;
+        sawSignal = init?.signal instanceof AbortSignal;
+        return new Promise((_resolve, reject) => init?.signal?.addEventListener('abort', () => reject(new Error('aborted'))));
+      },
+    });
+    const res = await local.request(`/profiles/${ALICE}`, {}, bindings);
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { profile: unknown }).profile).toEqual({ did: ALICE });
+    expect(sawSignal).toBe(true);
+    await local.request(`/profiles/${ALICE}`, {}, bindings);
+    expect(calls).toBe(1); // the failure is remembered briefly
+    const row = await db.prepare('SELECT fetched_at FROM profiles WHERE did = ?').bind(ALICE).first<{ fetched_at: number }>();
+    // Treated as fresh for no more than 60 s: fetched_at sits within a minute of the 24h expiry.
+    expect(row!.fetched_at + 24 * 3_600_000 - Date.now()).toBeLessThanOrEqual(60_000);
+    await db.prepare('UPDATE profiles SET fetched_at = fetched_at - 61000').run();
+    await local.request(`/profiles/${ALICE}`, {}, bindings);
+    expect(calls).toBe(2);
   });
 });

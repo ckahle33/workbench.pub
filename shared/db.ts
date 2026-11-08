@@ -509,6 +509,18 @@ export async function getUpdateWithReplies(
   };
 }
 
+/** True when `did` authored a visible indexed update or reply (projects are checked by the caller's list). */
+export async function hasIndexedUpdateOrReply(db: D1Database, did: string): Promise<boolean> {
+  const row = await db
+    .prepare(
+      `SELECT EXISTS(SELECT 1 FROM updates WHERE did = ?1 AND hidden = 0)
+           OR EXISTS(SELECT 1 FROM replies WHERE did = ?1 AND hidden = 0) AS known`,
+    )
+    .bind(did)
+    .first<{ known: number }>();
+  return row?.known === 1;
+}
+
 export interface ProfileRow {
   did: string;
   handle?: string;

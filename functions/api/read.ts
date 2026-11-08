@@ -1,3 +1,4 @@
+import { isValidDid } from '@atproto/syntax';
 import { Hono } from 'hono';
 import {
   decodeCursor,
@@ -5,6 +6,7 @@ import {
   getProjectWithUpdates,
   getTopic,
   getUpdateWithReplies,
+  hasIndexedUpdateOrReply,
   listFeed,
   listProfileProjects,
   listTopicProjects,
@@ -25,22 +27,31 @@ export interface Env {
 export interface ReadOptions {
   /** Injectable for tests; defaults to the global fetch. */
   fetchFn?: typeof fetch;
+  /** Profile fetch timeout; injectable for tests. */
+  profileTimeoutMs?: number;
 }
 
 const PROFILE_URL = 'https://public.api.bsky.app/xrpc/app.bsky.actor.getProfile';
 const PROFILE_TTL_MS = 24 * 3_600_000;
+const PROFILE_TIMEOUT_MS = 3_000;
+/** After a failed fetch, the profile (stale or just the did) is reused for this long before retrying. */
+const PROFILE_RETRY_MS = 60_000;
 const DEFAULT_LIMIT = 30;
 const MAX_LIMIT = 100;
 const PROJECT_UPDATES_LIMIT = 50;
 
 type Profile = Omit<ProfileRow, 'fetchedAt'>;
 
-/** Cached for 24h; any fetch failure falls back to stale data, then to just the did. */
-async function lookupProfile(db: D1Database, did: string, fetchFn: typeof fetch): Promise<Profile> {
+/**
+ * Cached for 24h. Any fetch failure (including the timeout) falls back to stale data, then to
+ * just the did, and that fallback is remembered for PROFILE_RETRY_MS so a slow upstream is not
+ * hit on every request. Callers only pass DIDs known to have indexed content.
+ */
+async function lookupProfile(db: D1Database, did: string, fetchFn: typeof fetch, timeoutMs: number): Promise<Profile> {
   const cached = await getCachedProfile(db, did);
   if (cached && Date.now() - cached.fetchedAt < PROFILE_TTL_MS) return strip(cached);
   try {
-    const res = await fetchFn(`${PROFILE_URL}?actor=${encodeURIComponent(did)}`);
+    const res = await fetchFn(`${PROFILE_URL}?actor=${encodeURIComponent(did)}`, { signal: AbortSignal.timeout(timeoutMs) });
     if (!res.ok) throw new Error(`getProfile ${res.status}`);
     const data = (await res.json()) as { handle?: string; displayName?: string; avatar?: string };
     const fresh: ProfileRow = {
@@ -53,7 +64,13 @@ async function lookupProfile(db: D1Database, did: string, fetchFn: typeof fetch)
     await putProfile(db, fresh);
     return strip(fresh);
   } catch {
-    return cached ? strip(cached) : { did };
+    const fallback: ProfileRow = { ...(cached ?? { did }), fetchedAt: Date.now() - PROFILE_TTL_MS + PROFILE_RETRY_MS };
+    try {
+      await putProfile(db, fallback);
+    } catch {
+      // Best effort: without the marker the next request simply retries.
+    }
+    return strip(fallback);
   }
 }
 
@@ -65,6 +82,7 @@ function strip({ fetchedAt: _f, ...rest }: ProfileRow): Profile {
 export function readRoutes(opts: ReadOptions = {}): Hono<{ Bindings: Env }> {
   const app = new Hono<{ Bindings: Env }>();
   const fetchFn = opts.fetchFn ?? ((input, init) => fetch(input, init));
+  const timeoutMs = opts.profileTimeoutMs ?? PROFILE_TIMEOUT_MS;
 
   /** Parses `limit` and `cursor`; a bad cursor is a client error. */
   const paging = (q: (k: string) => string | undefined, keyset = true, defaultLimit = DEFAULT_LIMIT): { limit: number; cursor?: ListCursor } | null => {
@@ -103,7 +121,7 @@ export function readRoutes(opts: ReadOptions = {}): Hono<{ Bindings: Env }> {
     if (!found) return c.json({ error: 'not found' }, 404);
     return c.json({
       project: found.project,
-      author: await lookupProfile(c.env.DB, did, fetchFn),
+      author: await lookupProfile(c.env.DB, did, fetchFn, timeoutMs),
       items: found.updates,
       cursor: found.cursor,
     });
@@ -115,7 +133,7 @@ export function readRoutes(opts: ReadOptions = {}): Hono<{ Bindings: Env }> {
     if (!found) return c.json({ error: 'not found' }, 404);
     return c.json({
       update: found.update,
-      author: await lookupProfile(c.env.DB, did, fetchFn),
+      author: await lookupProfile(c.env.DB, did, fetchFn, timeoutMs),
       items: found.replies,
       cursor: null,
     });
@@ -125,11 +143,13 @@ export function readRoutes(opts: ReadOptions = {}): Hono<{ Bindings: Env }> {
     const page = paging((k) => c.req.query(k));
     if (!page) return c.json({ error: 'bad cursor' }, 400);
     const did = c.req.param('did');
-    const [profile, projects] = await Promise.all([
-      lookupProfile(c.env.DB, did, fetchFn),
-      listProfileProjects(c.env.DB, did, page.cursor, page.limit),
-    ]);
-    return c.json({ profile, ...projects });
+    if (!isValidDid(did)) return c.json({ error: 'bad did' }, 400);
+    // Only DIDs with visible indexed content get a profile lookup (and a stored row), so the
+    // route cannot be used to make the Worker fetch and store arbitrary identities.
+    const projects = await listProfileProjects(c.env.DB, did, page.cursor, page.limit);
+    const known = projects.items.length > 0 || (await hasIndexedUpdateOrReply(c.env.DB, did));
+    if (!known) return c.json({ error: 'not found' }, 404);
+    return c.json({ profile: await lookupProfile(c.env.DB, did, fetchFn, timeoutMs), ...projects });
   });
 
   return app;
