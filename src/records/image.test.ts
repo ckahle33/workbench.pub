@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { fitWithin, resizeImage, type ImageBackend } from './image';
+import { browserBackend, fitWithin, ImageTooLargeError, MAX_INPUT_BYTES, resizeImage, type ImageBackend } from './image';
 
 describe('fitWithin', () => {
   it('scales landscape by width', () => {
@@ -53,5 +53,63 @@ describe('resizeImage', () => {
       encode: vi.fn(),
     };
     await expect(resizeImage(file, 1600, backend)).rejects.toThrow('Could not process this image');
+  });
+
+  it('releases the decoded source after encoding, and also when encoding fails', async () => {
+    const release = vi.fn();
+    const ok: ImageBackend = {
+      decode: vi.fn().mockResolvedValue({ width: 10, height: 10, source: 'bmp' }),
+      encode: vi.fn().mockResolvedValue(new Blob()),
+      release,
+    };
+    await resizeImage(file, 1600, ok);
+    expect(release).toHaveBeenCalledWith('bmp');
+    const failing: ImageBackend = { ...ok, encode: vi.fn().mockRejectedValue(new Error('x')) };
+    await expect(resizeImage(file, 1600, failing)).rejects.toThrow('Could not process this image');
+    expect(release).toHaveBeenCalledTimes(2);
+  });
+
+  it(`rejects files over ${MAX_INPUT_BYTES / 1024 / 1024} MB before decoding`, async () => {
+    const decode = vi.fn();
+    const big = new File(['x'], 'big.jpg', { type: 'image/jpeg' });
+    Object.defineProperty(big, 'size', { value: MAX_INPUT_BYTES + 1 });
+    const err = await resizeImage(big, 1600, { decode, encode: vi.fn() }).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ImageTooLargeError);
+    expect(decode).not.toHaveBeenCalled();
+  });
+});
+
+describe('browserBackend', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it('closes the bitmap on release', () => {
+    const bitmap = { width: 1, height: 1, close: vi.fn() };
+    browserBackend.release?.(bitmap);
+    expect(bitmap.close).toHaveBeenCalledOnce();
+  });
+
+  it('fills the canvas white before drawing (no black transparency) and releases the canvas', async () => {
+    const calls: string[] = [];
+    const ctx = {
+      set fillStyle(v: string) { calls.push(`fillStyle=${v}`); },
+      fillRect: (...a: number[]) => calls.push(`fillRect ${a.join(',')}`),
+      drawImage: () => calls.push('drawImage'),
+    };
+    let canvas: HTMLCanvasElement | undefined;
+    const create = document.createElement.bind(document);
+    vi.spyOn(document, 'createElement').mockImplementation((tag: string) => {
+      const el = create(tag);
+      if (tag === 'canvas') {
+        canvas = el as HTMLCanvasElement;
+        (el as HTMLCanvasElement).getContext = (() => ctx) as unknown as HTMLCanvasElement['getContext'];
+        (el as HTMLCanvasElement).toBlob = (cb: BlobCallback) => cb(new Blob(['j'], { type: 'image/jpeg' }));
+      }
+      return el;
+    });
+    const out = await browserBackend.encode({}, { width: 30, height: 20 }, 'image/jpeg', 0.85);
+    expect(out.type).toBe('image/jpeg');
+    expect(calls).toEqual(['fillStyle=#ffffff', 'fillRect 0,0,30,20', 'drawImage']);
+    expect(canvas!.width).toBe(0);
+    expect(canvas!.height).toBe(0);
   });
 });

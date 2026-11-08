@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { optimistic } from '../optimistic';
-import { resizeImage } from '../records/image';
+import { ImageTooLargeError, resizeImage } from '../records/image';
 import { createUpdate } from '../records/write';
 import { ALICE, BOB } from '../testUtils';
 import { NewUpdate } from './NewUpdate';
@@ -9,7 +9,10 @@ import { NewUpdate } from './NewUpdate';
 const h = vi.hoisted(() => ({ session: null as unknown }));
 vi.mock('../auth/SessionContext', () => ({ useSession: () => ({ session: h.session, loading: false, signOut: vi.fn() }) }));
 vi.mock('../records/write', () => ({ createUpdate: vi.fn() }));
-vi.mock('../records/image', () => ({ resizeImage: vi.fn() }));
+vi.mock('../records/image', async (importOriginal) => ({
+  ImageTooLargeError: (await importOriginal<typeof import('../records/image')>()).ImageTooLargeError,
+  resizeImage: vi.fn(),
+}));
 
 const PROJECT = `at://${ALICE}/pub.workbench.project/p1`;
 
@@ -183,5 +186,53 @@ describe('NewUpdate', () => {
     reject(new Error('x'));
     await screen.findByText(/something went wrong/i);
     expect(document.activeElement).toBe(btn);
+  });
+
+  describe('photo processing', () => {
+    const ready = () => {
+      renderPage();
+      fill(/heading/i, 'H');
+      fill(/notes/i, 'N');
+      pick(png('a.png'), png('b.png'), png('c.png'));
+      for (const n of [1, 2, 3]) fill(new RegExp(`alt text for photo ${n}`, 'i'), `alt ${n}`);
+    };
+
+    it('resizes one photo at a time, in order', async () => {
+      const log: string[] = [];
+      vi.mocked(resizeImage).mockImplementation(async (f: File) => {
+        log.push(`start ${f.name}`);
+        await new Promise((r) => setTimeout(r, 5));
+        log.push(`end ${f.name}`);
+        return new Blob(['x'], { type: 'image/jpeg' });
+      });
+      vi.mocked(createUpdate).mockResolvedValue({ uri: `at://${ALICE}/pub.workbench.update/u1`, images: [] } as never);
+      ready();
+      submit();
+      await screen.findByText('timeline page');
+      expect(log).toEqual(['start a.png', 'end a.png', 'start b.png', 'end b.png', 'start c.png', 'end c.png']);
+    });
+
+    it('names the photo that could not be processed and does not save', async () => {
+      vi.mocked(resizeImage).mockImplementation(async (f: File) => {
+        if (f.name === 'b.png') throw new Error('Could not process this image');
+        return new Blob(['x'], { type: 'image/jpeg' });
+      });
+      ready();
+      submit();
+      expect(await screen.findByText('Could not process photo 2. Try a different photo.')).toBeInTheDocument();
+      expect(createUpdate).not.toHaveBeenCalled();
+      expect(resizeImage).toHaveBeenCalledTimes(2);
+    });
+
+    it('says which photo is too large', async () => {
+      vi.mocked(resizeImage).mockImplementation(async (f: File) => {
+        if (f.name === 'c.png') throw new ImageTooLargeError();
+        return new Blob(['x'], { type: 'image/jpeg' });
+      });
+      ready();
+      submit();
+      expect(await screen.findByText('Photo 3 is too large (over 25 MB). Choose a smaller one.')).toBeInTheDocument();
+      expect(createUpdate).not.toHaveBeenCalled();
+    });
   });
 });

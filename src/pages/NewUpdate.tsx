@@ -20,10 +20,13 @@ import { Status } from '../components/Status';
 import { useSession } from '../auth/SessionContext';
 import { useTitle } from '../hooks';
 import { optimistic } from '../optimistic';
-import { resizeImage } from '../records/image';
+import { ImageTooLargeError, resizeImage } from '../records/image';
 import { plainImages } from '../records/blobs';
 import { createUpdate } from '../records/write';
 import { LIMITS } from '../../shared/lexicons';
+
+/** A photo could not be prepared; its message is ours and safe to show. */
+class PhotoError extends Error {}
 
 export function NewUpdate() {
   const { did = '', rkey = '' } = useParams();
@@ -84,11 +87,21 @@ export function NewUpdate() {
 
     setBusy(true);
     try {
-      const resized = await Promise.all(images.map((i) => resizeImage(i.file)));
-      const files = resized.map((blob, n) => ({
-        file: new File([blob], `photo-${n + 1}.jpg`, { type: blob.type || 'image/jpeg' }),
-        alt: images[n].alt.trim(),
-      }));
+      // One photo at a time: decoding several full-resolution phone photos at once can crash the tab.
+      const files: { file: File; alt: string }[] = [];
+      for (const [n, img] of images.entries()) {
+        let blob: Blob;
+        try {
+          blob = await resizeImage(img.file);
+        } catch (err) {
+          throw new PhotoError(
+            err instanceof ImageTooLargeError
+              ? `Photo ${n + 1} is too large (over 25 MB). Choose a smaller one.`
+              : `Could not process photo ${n + 1}. Try a different photo.`,
+          );
+        }
+        files.push({ file: new File([blob], `photo-${n + 1}.jpg`, { type: blob.type || 'image/jpeg' }), alt: img.alt.trim() });
+      }
       const result = await createUpdate(session, {
         project: projectUri,
         heading: heading.trim(),
@@ -111,7 +124,7 @@ export function NewUpdate() {
       });
       navigate(`/p/${did}/${rkey}`);
     } catch (err) {
-      setSubmitError(writeErrorMessage(err));
+      setSubmitError(err instanceof PhotoError ? err.message : writeErrorMessage(err));
       setBusy(false);
     }
   }
