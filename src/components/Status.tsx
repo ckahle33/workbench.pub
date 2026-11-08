@@ -24,7 +24,7 @@ export function LoadMore({ label = 'Load more', hasMore, loading, failed, onClic
   return (
     <div className="load-more">
       {failed && <Status kind="error" />}
-      <button type="button" onClick={onClick} disabled={loading}>
+      <button type="button" onClick={loading ? undefined : onClick} aria-disabled={loading || undefined}>
         {loading ? 'Loading…' : label}
       </button>
     </div>

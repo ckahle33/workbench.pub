@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { api } from '../api';
 import { json } from '../testUtils';
 import { ReportButton } from './ReportButton';
@@ -45,6 +45,6 @@ describe('ReportButton', () => {
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent(re);
     expect(alert.textContent).not.toMatch(/raw server/);
-    expect(screen.getByRole('button', { name: /send report/i })).toBeEnabled();
+    await waitFor(() => expect(screen.getByRole('button', { name: /send report/i })).not.toHaveAttribute('aria-disabled'));
   });
 });

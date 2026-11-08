@@ -306,6 +306,7 @@ export function TopicSelector({ value, onChange, error }: { value: string | null
   const previewSlug = normalizeSlug(name);
 
   async function create() {
+    if (busy) return;
     if (!previewSlug || !session) {
       setCreateError('Topic name needs 2 to 40 letters or numbers.');
       return;
@@ -363,7 +364,7 @@ export function TopicSelector({ value, onChange, error }: { value: string | null
         <div className="subform">
           <TextField label="New topic name" value={name} onChange={setName} max={LIMITS.title} error={createError ?? undefined} />
           <p className="meta">{previewSlug ? <>Slug that will be used: #{previewSlug}</> : 'Slug that will be used: (enter 2 to 40 letters or numbers)'}</p>
-          <button type="button" disabled={busy} onClick={() => void create()}>
+          <button type="button" aria-disabled={busy || undefined} onClick={() => void create()}>
             {busy ? 'Creating…' : 'Create topic'}
           </button>
         </div>

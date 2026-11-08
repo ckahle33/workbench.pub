@@ -55,6 +55,6 @@ describe('FollowButton', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Follow' }));
     const alert = await screen.findByRole('alert');
     expect(alert.textContent).not.toMatch(/raw/);
-    expect(screen.getByRole('button', { name: 'Follow' })).toBeEnabled();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Follow' })).not.toHaveAttribute('aria-disabled'));
   });
 });

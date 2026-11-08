@@ -128,7 +128,7 @@ describe('NewUpdate', () => {
     fill(/notes/i, 'n');
     submit();
     expect(await screen.findByText(/could not save to your pds/i)).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByRole('button', { name: /post update/i })).toBeEnabled());
+    await waitFor(() => expect(screen.getByRole('button', { name: /post update/i })).not.toHaveAttribute('aria-disabled'));
   });
 
   it('focuses the alt field of the image missing alt text', () => {
@@ -164,5 +164,24 @@ describe('NewUpdate', () => {
     has(/link 1 address/i, /web address/i);
     has(/part 1 quantity/i, /item and a quantity/i);
     has(/part 1 item/i, /item and a quantity/i);
+  });
+
+  it('keeps focus on the submit button through a failed save and ignores a second activation while busy', async () => {
+    let reject!: (e: Error) => void;
+    vi.mocked(createUpdate).mockReturnValue(new Promise((_, rej) => (reject = rej)));
+    renderPage();
+    fill(/heading/i, 'h');
+    fill(/notes/i, 'n');
+    const btn = screen.getByRole('button', { name: /post update/i });
+    btn.focus();
+    fireEvent.click(btn);
+    const busyBtn = await screen.findByRole('button', { name: /posting/i });
+    expect(busyBtn).toBe(btn);
+    expect(document.activeElement).toBe(btn);
+    fireEvent.click(busyBtn);
+    expect(createUpdate).toHaveBeenCalledTimes(1);
+    reject(new Error('x'));
+    await screen.findByText(/something went wrong/i);
+    expect(document.activeElement).toBe(btn);
   });
 });

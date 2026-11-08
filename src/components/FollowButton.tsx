@@ -18,6 +18,7 @@ function Toggle({ session, kind, subject }: Props & { session: Session }) {
   const [error, setError] = useState<string | null>(null);
 
   async function toggle() {
+    if (busy) return;
     setBusy(true);
     setError(null);
     try {
@@ -39,7 +40,7 @@ function Toggle({ session, kind, subject }: Props & { session: Session }) {
 
   return (
     <div className="follow">
-      <button type="button" disabled={busy} onClick={() => void toggle()}>
+      <button type="button" aria-disabled={busy || undefined} onClick={() => void toggle()}>
         {followUri ? 'Unfollow' : 'Follow'}
       </button>
       <FieldError id={`follow-err-${kind}`}>{error}</FieldError>

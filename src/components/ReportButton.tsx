@@ -23,6 +23,7 @@ export function ReportButton({ uri }: { uri: string }) {
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
+    if (busy) return;
     setBusy(true);
     setError(null);
     try {
@@ -46,7 +47,7 @@ export function ReportButton({ uri }: { uri: string }) {
         <form id={panel} onSubmit={(e) => void onSubmit(e)} noValidate>
           <TextField label="Reason (optional)" value={reason} onChange={setReason} max={REASON_MAX} multiline />
           <FieldError id={`${panel}-err`}>{error}</FieldError>
-          <button type="submit" disabled={busy}>
+          <button type="submit" aria-disabled={busy || undefined}>
             {busy ? 'Sending…' : 'Send report'}
           </button>
         </form>

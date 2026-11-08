@@ -37,7 +37,7 @@ export function ReplyBox({ subjectUri }: { subjectUri: string }) {
   return (
     <form onSubmit={(e) => void onSubmit(e)} noValidate className="reply-box">
       <TextField label="Your reply" value={body} onChange={setBody} max={LIMITS.replyBody} multiline error={error ?? undefined} />
-      <button type="submit" disabled={busy}>
+      <button type="submit" aria-disabled={busy || undefined}>
         {busy ? 'Posting…' : 'Post reply'}
       </button>
     </form>

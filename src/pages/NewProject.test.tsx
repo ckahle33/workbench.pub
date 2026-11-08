@@ -149,8 +149,9 @@ describe('NewProject', () => {
     expect(screen.getByLabelText(/new topic name/i).getAttribute('aria-describedby')).toContain(nameErr.id);
   });
 
-  it('does not steal focus on a non-validation failure', async () => {
-    vi.mocked(createProject).mockRejectedValue(new Error('x'));
+  it('keeps focus on the submit button through a failed save and ignores a second activation while busy', async () => {
+    let reject!: (e: Error) => void;
+    vi.mocked(createProject).mockReturnValue(new Promise((_, rej) => (reject = rej)));
     renderPage();
     await screen.findByRole('option', { name: /Synthesizers/ });
     fill(/^title/i, 'T');
@@ -159,7 +160,15 @@ describe('NewProject', () => {
     const btn = screen.getByRole('button', { name: /create project/i });
     btn.focus();
     fireEvent.click(btn);
+    const busyBtn = await screen.findByRole('button', { name: /creating/i });
+    expect(busyBtn).toBe(btn);
+    expect(busyBtn).toHaveAttribute('aria-disabled', 'true');
+    expect(document.activeElement).toBe(btn);
+    fireEvent.click(busyBtn);
+    expect(createProject).toHaveBeenCalledTimes(1);
+    reject(new Error('x'));
     await screen.findByText(/something went wrong/i);
+    expect(screen.getByRole('button', { name: /create project/i })).not.toHaveAttribute('aria-disabled');
     expect(document.activeElement).toBe(btn);
   });
 });

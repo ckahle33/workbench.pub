@@ -76,7 +76,7 @@ export function NewProject() {
       </div>
       <TopicSelector value={topic} onChange={setTopic} error={errors.topic} />
       <FieldError id="submit-error">{submitError}</FieldError>
-      <button type="submit" disabled={busy}>
+      <button type="submit" aria-disabled={busy || undefined}>
         {busy ? 'Creating…' : 'Create project'}
       </button>
     </form>

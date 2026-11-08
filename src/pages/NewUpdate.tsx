@@ -128,7 +128,7 @@ export function NewUpdate() {
       <LinkList rows={links} onChange={setLinks} errors={linkErrors} />
       <PartsList rows={parts} onChange={setParts} errors={partErrors} />
       <FieldError id="submit-error">{submitError}</FieldError>
-      <button type="submit" disabled={busy}>
+      <button type="submit" aria-disabled={busy || undefined}>
         {busy ? 'Posting…' : 'Post update'}
       </button>
     </form>
