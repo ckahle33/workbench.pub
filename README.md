@@ -8,7 +8,7 @@ It is built on the [AT Protocol](https://atproto.com). You sign in with an exist
 account, and your projects, updates and replies are stored as records in your own account
 (`pub.workbench.*`), not on our servers. This site indexes them and displays them.
 
-Status: in development. The backend is built; the sign-in is built; the pages are in progress.
+Status: built, not yet deployed. Sign-in, the reading pages and the writing pages are built; the first deploy and live verification (sign-in against a real PDS, ingest, smoke test) remain.
 
 ## How it works
 
@@ -64,7 +64,7 @@ against a real Cloudflare account yet.
 | D1 Free | 5 million rows read/day, 100,000 rows written/day, 5 GB total storage (500 MB max per database, 10 databases). Resets 00:00 UTC. Hitting a limit makes queries fail until reset. | https://developers.cloudflare.com/d1/platform/pricing/ and /d1/platform/limits/ |
 | Workers Free requests | 100,000/day, resets at midnight UTC (Error 1027 after). Requests to static assets are "free and unlimited". Requests that match `run_worker_first` still invoke the Worker and, past the daily limit, get a 429 instead of falling back to assets. | https://developers.cloudflare.com/workers/platform/limits/ and https://developers.cloudflare.com/workers/static-assets/billing-and-limitations/ |
 | Custom domain | Needs an active Cloudflare zone (the docs do not spell out "Cloudflare DNS", but the zone is a Cloudflare zone, so the domain's nameservers must point to Cloudflare). No existing CNAME may exist on the hostname. Apex domains are supported. Cloudflare creates the DNS record and an Advanced Certificate with no extra subscription. | https://developers.cloudflare.com/workers/configuration/routing/custom-domains/ |
-| Static assets config | `run_worker_first` accepts an array of globs (up to 100; `!` prefix for negatives). `not_found_handling = "single-page-application"` serves `/index.html` with 200 for unmatched paths. The docs' flowchart says non-listed navigation requests are served from assets without invoking the Worker; the prose does not state it directly, so confirm in the smoke test that `/topics/electronics` loads and `/api/nope` returns the API 404. Limits: 20,000 files, 25 MiB per file. | https://developers.cloudflare.com/workers/static-assets/routing/single-page-application/ and /workers/static-assets/binding/ |
+| Static assets config | `run_worker_first` accepts an array of globs (up to 100; `!` prefix for negatives). `not_found_handling = "single-page-application"` serves `/index.html` with 200 for unmatched paths. The docs' flowchart says non-listed navigation requests are served from assets without invoking the Worker; the prose does not state it directly, so confirm in the smoke test that `/t/electronics` loads and `/api/nope` returns the API 404. Limits: 20,000 files, 25 MiB per file. | https://developers.cloudflare.com/workers/static-assets/routing/single-page-application/ and /workers/static-assets/binding/ |
 
 Consequence for the ingest Worker: the 50 query limit and the 10 ms CPU limit are real constraints. See "Known risks" item 3.
 
@@ -121,7 +121,7 @@ Consequence for the ingest Worker: the 50 query limit and the 10 ms CPU limit ar
 
    Expect `200`, a `content-type` of `application/json`, `"client_id": "https://workbench.pub/client-metadata.json"` and `"redirect_uris": ["https://workbench.pub/"]`. If it comes back as HTML, the SPA fallback is shadowing it; check that `dist/client-metadata.json` exists after the build.
 
-8. Create the dedicated site account on the workbench.pub domain and an app password for it, put them in `.env` (see "Seeding topics"), and run once:
+8. Create the dedicated site account on the workbench.pub domain and an app password for it, put them in `.env` (see "Seeding topics"), and run once. The handle must be verified with a DNS TXT record, not the HTTP method: add `_atproto.workbench.pub` with the value `did=<the account's DID>` in Cloudflare DNS. The `/.well-known/atproto-did` HTTP method does not work here because the SPA fallback answers that path with `index.html`.
 
    ```bash
    npm run seed:topics
@@ -131,7 +131,7 @@ Consequence for the ingest Worker: the 50 query limit and the 10 ms CPU limit ar
 
 ### Smoke test
 
-1. Open https://workbench.pub in a private window; `/topics/electronics` and a hard refresh on it must load the app.
+1. Open https://workbench.pub in a private window; `/t/electronics` and a hard refresh on it must load the app. Check the response headers of `/` include the `Content-Security-Policy` from `public/_headers`, open the browser console on a few pages (home, a project with photos and a link card, sign-in) and confirm there are no CSP violations.
 2. Sign in with a real account. If the PDS rejects the scopes, see risk 1.
 3. Create a topic and a project; post an update with a photo and a GitHub link.
 4. Wait one cron interval (one minute, plus up to 15 minutes the first time for the cron to propagate). Check `npx wrangler tail workbench-ingest --format pretty` for a `jetstream drain` line with `applied > 0` (`ignored` counts identity/account and foreign traffic and does not prove indexing). Also check the CPU time of the cron invocation in the dashboard (Workers & Pages, workbench-ingest, Metrics or the invocation logs): it must stay under the 10 ms Free limit. A line `jetstream drain stopped on a D1 error (errored runs in a row: N)` with N growing means a poison event: the preceding `ingest apply error` line names the error and the event's uri and collection.
@@ -152,16 +152,33 @@ Consequence for the ingest Worker: the 50 query limit and the 10 ms CPU limit ar
 
    Replace the `EXAMPLE` values with real ones from your test content (use a throwaway test account for the block test). Reports return 201, admin calls return `{"ok":true}`.
 
+### Rate limiting on /api/* (add after the first deploy)
+
+The Worker caps link-card fetches per IP and edge-caches the anonymous feed, topic list and images, but nothing stops a single client from hammering other `/api/*` routes and burning the free Worker and D1 quotas. Add one free Cloudflare WAF rate limiting rule in the dashboard:
+
+1. Select the `workbench.pub` zone, then Security, then WAF, then the Rate limiting rules tab, then Create rule.
+2. Name it `api`. Under "If incoming requests match", choose "Custom expression" or the field picker: Field `URI Path`, Operator `starts with`, Value `/api/`.
+3. Under "With the same characteristics", keep `IP` (the only characteristic on Free).
+4. "When rate exceeds": for example 100 requests per 10 seconds (Free offers only the 10 second period).
+5. "Then take action": Block, for the duration offered (10 seconds on Free). Deploy.
+
+What I could not verify: these menu names and the Free plan's exact options are from memory of Cloudflare's docs (one free rate limiting rule, IP-only characteristic, 10 s period and 10 s mitigation timeout); the docs could not be fetched while writing this. Check https://developers.cloudflare.com/waf/rate-limiting-rules/ and adjust. The navigation has moved between "Security, WAF" and "Security, Security rules" in recent dashboard versions.
+
+### Edge caching and security headers
+
+- `GET /api/feed` without `following` and `GET /api/topics` are cached in `caches.default` for 30 s (`Cache-Control: public, max-age=30`), keyed on the full URL; requests with an `Authorization` header and non-200 responses are never cached. Images from `/api/blob` are cached at the edge (CID-addressed, immutable) and DID-to-PDS lookups for an hour. The Cache API only works on the custom domain, not on `*.workers.dev`. A hide or block can take up to 30 s to leave the cached lists.
+- `public/_headers` sets nosniff, a referrer policy, `X-Frame-Options: DENY` and a CSP for the static assets (the HTML shell, JS/CSS, `client-metadata.json`). `connect-src` and `img-src` allow any `https:` origin because the OAuth client talks to each user's own PDS and authorization server, and link-card images are arbitrary. `/api/*` responses come from the Worker and are not affected.
+
 ### Logs and rollback
 
-- Live logs: `npx wrangler tail workbench-pub` (web) and `npx wrangler tail workbench-ingest` (cron). The ingest Worker logs `jetstream drain {...}`, `jetstream gap` and `jetstream drain stopped on a D1 error`.
+- Live logs: `npx wrangler tail workbench-pub` (web) and `npx wrangler tail workbench-ingest` (cron). The ingest Worker logs `jetstream drain {...}` (counts and flags only), `jetstream gap`, `jetstream drain stopped on a D1 error (errored runs in a row: N)` and, for a poison event, `ingest apply error` with the error name, uri and collection.
 - Roll back a Worker to its previous version: `npx wrangler rollback` (web, from the repo root) or `npx wrangler rollback --config ingest/wrangler.toml` (ingest). Rollback does not undo D1 migrations or secrets.
 
 ### Known risks and fallbacks
 
 1. Granular OAuth scopes. Sign-in requests `repo:pub.workbench.*` per collection plus `blob:image/*`; whether every PDS has shipped these is not documented. If sign-in fails with a scope error, change `scope` to `atproto transition:generic` in both `src/auth/config.ts` and `public/client-metadata.json` (a test checks they match), rebuild and redeploy.
 2. Jetstream v1 vs v2. The ingest uses the legacy v1 host and `wantedCollections`/microsecond `cursor`. They are documented only in the legacy repo, not marked removed, and worked in a live run. v2 is what the current docs recommend; move before v1 is retired (no date is published).
-3. D1 per-invocation query limit (50 on Free). `applyEvent` costs 3 queries for a normal event (see below), so one run can safely apply about 15 events. More than that in one run makes a D1 call throw, the drain stops with `errored`, and the closing `setCursor` also fails, so the cursor does not advance and every later run replays the same first events: the ingest stalls permanently while a backlog above about 15 events exists. Smallest fix, not yet implemented: cap events per run at 15 (close the socket and `setCursor` once the budget `2 + 3 x events` reaches 47), guard `setCursor` so a failure cannot hide progress, and run the cron every minute (`crons = ["* * * * *"]`, 15 events/minute is about 21,600/day) so the backlog drains. A second option is a single `db.batch` per drain that collects events during the socket window, since a batch counts as one query. Also unknown: whether 15 events fit in the 10 ms Free cron CPU limit.
+3. D1 per-invocation query limit (50 on Free). Implemented: the drain budgets by D1 queries (`ingest/src/drain.ts`): `applyEvent` costs at most 3 queries per event, the run reserves 1 for `getCursor`, 1 for the `ingest_counts` prune, 1 for the closing cursor save and 2 for the WebSocket subrequests (in case subrequests share the limit), so a run applies at most 15 events and stops cleanly with `capped`; the cron runs every minute (about 21,600 events/day). A cursor-save failure is non-fatal. Still unknown: whether 15 events fit in the 10 ms Free cron CPU limit (check in the smoke test, step 4).
 4. Link cards: a Worker cannot resolve DNS, so the SSRF check (`shared/ssrf.ts`) is hostname- and literal-IP-based; a public-looking hostname that resolves to a private address (DNS rebinding, nip.io-style names) is not caught. Residual risk; Cloudflare's network egress limits the blast radius but this is not verified.
 5. Follow state is not persistent across devices: there is no "my follows" API, so the follow record uri is remembered in the browser's localStorage (`src/follows.ts`) per signed-in did. A new browser shows everything as not followed.
 6. Optimistic items are removed only when the server later returns the same `uri` (`src/optimistic.ts`); if indexing rejects the record, or ingest is stalled, the item stays visible.
@@ -229,11 +246,15 @@ Any non-loopback origin other than workbench.pub (previews) will fail the redire
 
 Query budget: Workers Free allows 50 D1 queries per invocation (a `db.batch` counts as 1), so the drain budgets by
 queries, not events. `ingest/src/queryBudget.ts` counts every query; before each event the drain requires
-`used + 3 (worst-case applyEvent) + 1 (setCursor reserve) <= 50`, otherwise it stops, saves the cursor at the last
-handled event and reports `capped` so the next run continues. Real costs: foreign, identity and replay-skipped events 0,
-a blocked DID 1, a rejected record 2, a normal event 3. With all-normal events a run fits (50 - 1 getCursor - 1 setCursor) / 3
-= 16 events; the first is the event at the saved cursor, which a capped run re-applies (idempotent) because
-only events strictly below the cursor are skipped, so a capped run nets about 15 new events (16 on a fresh cursor), which
-is roughly 21,600 per day at one run a minute (cheaper events raise it). A failed cursor save is logged and reported as
-`errored` rather than thrown. The Free-plan 10 ms CPU limit for cron invocations is untested: whether 16 events fit is
-unknown until a deploy smoke test (watch `wrangler tail`).
+`used + 3 (worst-case applyEvent) + 1 (cursor save) + 2 (WebSocket subrequests, in case they share the limit) <= 50`,
+otherwise it stops, saves the cursor at the last handled event and reports `capped` so the next run continues. Fixed
+costs per run: `getCursor` 1, one bounded `ingest_counts` prune (50 rows older than 2 days) 1, the cursor save 1. Real
+event costs: identity/account frames (skipped without `JSON.parse`), foreign collections and replay-skipped events 0, a
+blocked DID 1, a rejected record 2, a normal event 3. With all-normal events a run fits floor((50 - 3 - 2) / 3) = 15
+events (48 D1 queries plus 2 sockets); a capped run re-applies the event at the saved cursor (idempotent), so it nets
+about 14 new events, roughly 20,000 per day at one run a minute. A run also stops as soon as an event's `time_us` reaches
+the time the run started (`caughtUp`), so a live-tail run does not idle on network-wide traffic. The log line reports
+`applied`, `rejected` and `ignored` separately and `errorStreak`, the number of consecutive runs that stopped on a D1 error
+(persisted in `cursor.error_streak`). A failed cursor save is logged and reported as `errored` rather than thrown. The
+Free-plan 10 ms CPU limit for cron invocations is untested until a deploy smoke test (watch `wrangler tail` and the
+dashboard CPU time).
