@@ -100,8 +100,10 @@ shape; the builder finalises the lexicon JSON.
   title), `parts` (optional list of item/quantity/note), `createdAt`.
 - `pub.workbench.reply`: `subject` (at-uri of an update or another reply),
   `body`, `createdAt`.
-- `pub.workbench.follow`: `subject` (at-uri of a project or topic),
-  `createdAt`.
+- `pub.workbench.follow`: `kind` (`project` | `topic`), `subject` (the at-uri
+  of a project when `kind` is `project`; the canonical topic slug when `kind` is
+  `topic`), `createdAt`. (Changed during the build: topics are referenced by
+  slug everywhere, so an at-uri would not resolve to the canonical topic.)
 - `pub.workbench.defs`: shared types (link, part, image).
 
 ### Architecture
