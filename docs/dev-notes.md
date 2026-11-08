@@ -7,7 +7,7 @@ Platform choice, test layout, the ingest drain and the sign-in client. Moved out
 Cloudflare's Pages overview currently says "Start new projects with Workers." The compatibility matrix
 also shows Cron Triggers and the broader feature set only on Workers, with D1 supported on both. So the
 root `wrangler.toml` defines a Worker (`main = "functions/index.ts"`, a Hono app) that serves `dist/` as
-static assets with SPA fallback, and runs first only for `/api/*`. D1 binding is `DB` in both
+static assets with SPA fallback, and runs first only for `/api/*` and the share pages `/p/*`, `/u/*`, `/t/*`, `/profile/*` (see "Share cards"). D1 binding is `DB` in both
 `wrangler.toml` and `ingest/wrangler.toml`.
 
 Caveat: Workers only serves custom domains whose DNS is managed by Cloudflare, so workbench.pub must be
@@ -93,3 +93,15 @@ the time the run started (`caughtUp`), so a live-tail run does not idle on netwo
 (persisted in `cursor.error_streak`). A failed cursor save is logged and reported as `errored` rather than thrown. The
 Free-plan 10 ms CPU limit for cron invocations is untested until a deploy smoke test (watch `wrangler tail` and the
 dashboard CPU time).
+
+## Share cards
+
+Link-preview crawlers (Bluesky, Slack, iMessage, Discord, X) do not run JavaScript, so they only see the tags in the HTML shell.
+
+- Default card: `public/og.png` (1200x630 PNG, about 46 KB), rendered from `scripts/og/og.html` with headless Chrome by `sh scripts/og/render.sh` (also renders `public/apple-touch-icon.png`; see `scripts/og/README.md`). `index.html` carries the full default set: canonical, description, `og:*` with image size and alt, `twitter:card` `summary_large_image`, favicon, theme colour. `DEFAULT_*` in `functions/shareMeta.ts` must match it (tested).
+- Per-page meta: `wrangler.toml` `run_worker_first = ["/api/*", "/p/*", "/u/*", "/t/*", "/profile/*"]` (globs, `*` matches deeply; verified against https://developers.cloudflare.com/workers/static-assets/binding/ on 2026-11-08). `functions/shareMeta.ts` (mounted last in `functions/app.ts`) fetches the shell with `env.ASSETS.fetch(<origin>/)`, parses the path (`/p/:did/:rkey`, `/u/:did/:rkey`, `/t/:slug`, `/profile/:did`; anything else, such as `/p/:did/:rkey/update`, gets the shell unchanged without touching D1), runs ONE D1 query with the read API's visibility rules, and rewrites `<title>`, description, `og:title/description/url/type/image/image:alt`, `twitter:*` and the canonical link with `HTMLRewriter`. Misses, hidden or blocked content and malformed paths return 200 with the default tags; the SPA shows its own not-found.
+- Text: user text goes through `cleanText` (lone surrogates replaced, whitespace collapsed, C0/C1 and bidi-control characters removed, truncated by graphemes: titles 70, descriptions 200, with `…`) and is written only through `setAttribute` / `setInnerContent`. `setAttribute` escapes only `"`, so `&`, `<`, `>` are encoded before it (tests pin this).
+- Image: project = first photo of the latest owner update that has photos, else the project cover; update = its first photo, else the project cover. Used only when the blob proxy would serve it (resolvable DID, CID, raster type from the record) and the record's `size` is at most 900,000 bytes (Bluesky's thumbnail limit is about 1 MB and the proxy serves the original); otherwise `og.png`. Photo cards drop `og:image:width/height/type` (unknown). Local demo data uses fake DIDs and SVG placeholders, so locally every card shows `og.png`.
+- Cache: a found entity's meta (small JSON) is kept in `caches.default` for 5 minutes under `https://cache.internal/share-meta/v1<canonical path>` (query strings cannot bust it); misses are not cached, so a page indexed a minute later gets its card. Hidden or blocked content can keep its card for up to 5 minutes. The HTML itself is not edge-cached and keeps the shell's `Cache-Control` (`public, max-age=0, must-revalidate`), so a deploy never leaves a cached shell pointing at old asset hashes.
+- Headers: Cloudflare documents that `_headers` is not applied to Worker responses, so the share routes set `SECURITY_HEADERS` (`functions/securityHeaders.ts`) themselves; a test keeps it equal to the `/*` block of `public/_headers`. The shell's `ETag` is dropped because the body changed.
+- Limits: every share-page request is a Worker invocation (counts toward the 100,000/day Free limit; past it those pages get Cloudflare's 429 instead of the static shell), and at most one D1 query.
