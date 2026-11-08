@@ -30,7 +30,7 @@ export function SignIn() {
   }
 
   return (
-    <main>
+    <div>
       <h1>Sign in</h1>
       <form onSubmit={onSubmit} noValidate>
         <label htmlFor="handle">Your AT Protocol handle</label>
@@ -58,6 +58,6 @@ export function SignIn() {
           {busy ? 'Redirecting...' : 'Sign in'}
         </button>
       </form>
-    </main>
+    </div>
   );
 }
