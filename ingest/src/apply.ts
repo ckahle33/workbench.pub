@@ -83,9 +83,13 @@ export async function applyEvent(
       case 'pub.workbench.project':
         await upsertProject(db, meta, v.value as import('../../shared/types').ProjectRecord);
         break;
-      case 'pub.workbench.update':
+      case 'pub.workbench.update': {
+        // An update belongs to its project's owner: the project at-uri's repo must be the writer.
+        const projectDid = (v.value as import('../../shared/types').UpdateRecord).project.split('/')[2];
+        if (projectDid !== ev.did) return 'rejected';
         await upsertUpdate(db, meta, v.value as import('../../shared/types').UpdateRecord);
         break;
+      }
       case 'pub.workbench.reply':
         await upsertReply(db, meta, v.value as import('../../shared/types').ReplyRecord);
         break;

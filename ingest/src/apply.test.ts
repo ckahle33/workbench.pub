@@ -118,6 +118,18 @@ describe('applyEvent', () => {
     expect(await count('updates')).toBe(1);
   });
 
+  it('accepts an update to the author\'s own project and rejects one naming another DID\'s project', async () => {
+    const own = await applyEvent(db, commit(A, 'create', U, 'u1', update(`at://${A}/${P}/p1`)), NOW);
+    expect(own).toBe('applied');
+    const other = await applyEvent(db, commit(A, 'create', U, 'u2', update('at://did:plc:b/' + P + '/p1')), NOW);
+    expect(other).toBe('rejected');
+    expect(await count('updates')).toBe(1);
+    // replay stays idempotent
+    expect(await applyEvent(db, commit(A, 'create', U, 'u1', update(`at://${A}/${P}/p1`)), NOW)).toBe('applied');
+    expect(await applyEvent(db, commit(A, 'create', U, 'u2', update('at://did:plc:b/' + P + '/p1')), NOW)).toBe('rejected');
+    expect(await count('updates')).toBe(1);
+  });
+
   it('rejects an oversize body and writes nothing', async () => {
     const r = await applyEvent(db, commit(A, 'create', U, 'u1', update(`at://${A}/${P}/p1`, 'x'.repeat(6000))), NOW);
     expect(r).toBe('rejected');

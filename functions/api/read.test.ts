@@ -65,6 +65,18 @@ describe('feed', () => {
     expect(new Set(seen).size).toBe(7);
   });
 
+  it('ignores an update whose author is not its project\'s owner (feed, timeline, permalink)', async () => {
+    await seedProject(P1);
+    await seedUpdate(P1, 'good', 200);
+    await seedUpdate(P1, 'evil', 300, BOB);
+    const feed = (await (await get('/api/feed')).json()) as { items: { rkey: string }[] };
+    expect(feed.items.map((i) => i.rkey)).toEqual(['good']);
+    const proj = (await (await get('/api/projects/did:plc:alice/p1')).json()) as { items: { rkey: string }[] };
+    expect(proj.items.map((i) => i.rkey)).toEqual(['good']);
+    const [, , r] = updUri('evil', BOB).slice(5).split('/');
+    expect((await get(`/api/updates/${BOB}/${r}`)).status).toBe(404);
+  });
+
   it('rejects a malformed cursor', async () => {
     expect((await get('/api/feed?cursor=nonsense')).status).toBe(400);
   });
@@ -229,10 +241,10 @@ describe('projects, updates, profiles', () => {
   it('seeks the project updates by index, not a table scan', async () => {
     const plan = await db
       .prepare(
-        `EXPLAIN QUERY PLAN SELECT * FROM updates WHERE project_uri = ? AND hidden = 0 AND (indexed_at, uri) < (?, ?)
+        `EXPLAIN QUERY PLAN SELECT * FROM updates WHERE project_uri = ? AND hidden = 0 AND did = ? AND (indexed_at, uri) < (?, ?)
          ORDER BY indexed_at DESC, uri DESC LIMIT ?`,
       )
-      .bind(P1, 1, 'at://x', 51)
+      .bind(P1, ALICE, 1, 'at://x', 51)
       .all<{ detail: string }>();
     const text = plan.results.map((r) => r.detail).join('\n');
     expect(text).toMatch(/SEARCH updates USING INDEX idx_updates_project_visible/);

@@ -357,7 +357,7 @@ export async function listFeed(
   const { results } = await db
     .prepare(
       `SELECT w.*, p.did AS p_did, p.rkey AS p_rkey, p.title AS p_title, p.topic_slug AS p_topic,
-              (p.uri IS NOT NULL AND p.hidden = 0 ${followed}) AS visible
+              (p.uri IS NOT NULL AND p.hidden = 0 AND p.did = w.did ${followed}) AS visible
        FROM (SELECT * FROM updates WHERE hidden = 0 ${seek}
              ORDER BY indexed_at DESC, uri DESC LIMIT ${FEED_SCAN_WINDOW}) w
        LEFT JOIN projects p ON p.uri = w.project_uri
@@ -450,10 +450,10 @@ export async function getProjectWithUpdates(
   const seek = cursor ? 'AND (indexed_at, uri) < (?, ?)' : '';
   const { results } = await db
     .prepare(
-      `SELECT * FROM updates WHERE project_uri = ? AND hidden = 0 ${seek}
+      `SELECT * FROM updates WHERE project_uri = ? AND hidden = 0 AND did = ? ${seek}
        ORDER BY indexed_at DESC, uri DESC LIMIT ?`,
     )
-    .bind(...(cursor ? [uri, cursor.indexedAt, cursor.uri, limit + 1] : [uri, limit + 1]))
+    .bind(...(cursor ? [uri, p.did, cursor.indexedAt, cursor.uri, limit + 1] : [uri, p.did, limit + 1]))
     .all<Row>();
   const page = paginate(results.map(toUpdate), limit);
   return { project: toProject(p), updates: page.items, cursor: page.cursor };
@@ -471,7 +471,7 @@ export async function getUpdateWithReplies(
     .prepare(
       `SELECT u.*, p.did AS p_did, p.rkey AS p_rkey, p.title AS p_title, p.topic_slug AS p_topic
        FROM updates u JOIN projects p ON p.uri = u.project_uri
-       WHERE u.uri = ? AND u.hidden = 0 AND p.hidden = 0`,
+       WHERE u.uri = ? AND u.hidden = 0 AND p.hidden = 0 AND u.did = p.did`,
     )
     .bind(uri)
     .first<Row>();
