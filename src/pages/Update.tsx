@@ -41,11 +41,11 @@ export function Update() {
     const [, , pDid, , pRkey] = u.projectUri.split('/');
     return (
       <>
-        <p className="meta">
-          In <Link to={`/p/${pDid}/${pRkey}`}>the project</Link>
+        <p className="meta-line update-meta">
+          <Link to={`/p/${pDid}/${pRkey}`}>Back to the project</Link>
         </p>
         <TimelineEntry update={u} headingLevel={1} />
-        <p className="meta">Replies will appear once this update is indexed.</p>
+        <p className="helper update-pending">Replies will appear once this update is indexed.</p>
       </>
     );
   }
@@ -57,11 +57,19 @@ export function Update() {
 
   return (
     <>
-      <p className="meta">
-        In <Link to={`/p/${update.project.did}/${update.project.rkey}`} dir="auto">{update.project.title}</Link> by <AuthorName author={author} />
+      <p className="meta-line update-meta">
+        <span>
+          In{' '}
+          <Link to={`/p/${update.project.did}/${update.project.rkey}`} dir="auto" className="as-is">
+            {update.project.title}
+          </Link>
+        </span>
+        <span>
+          By <AuthorName author={author} />
+        </span>
       </p>
       <TimelineEntry update={update} headingLevel={1} />
-      <div className="actions">
+      <div className="owner-actions update-actions">
         <ReportButton uri={update.uri} />
         <DeleteButton
           uri={update.uri}
@@ -71,8 +79,10 @@ export function Update() {
           onDeleted={() => navigate(`/p/${update.project.did}/${update.project.rkey}`)}
         />
       </div>
-      <section aria-labelledby="replies-h">
-        <h2 id="replies-h">Replies</h2>
+      <section aria-labelledby="replies-h" className="section replies-section">
+        <h2 id="replies-h" className="section-title">
+          Replies
+        </h2>
         <Replies replies={replies} rootUri={update.uri} />
         <ReplyBox subjectUri={update.uri} />
         <LoadMore label="Load more replies" hasMore={list.hasMore} loading={list.loadingMore} failed={list.moreFailed} onClick={list.loadMore} />

@@ -19,9 +19,10 @@ export function Replies({ replies, rootUri }: { replies: ReplyView[]; rootUri: s
   return (
     <ol className="replies">
       {ordered.map((r) => (
-        <li key={r.uri} style={{ marginInlineStart: `${depth(r)}rem` }}>
-          <p className="meta">
-            <Link to={`/profile/${r.did}`} className="did">{r.did}</Link> · <DateText iso={r.createdAt} />
+        <li key={r.uri} className={depth(r) > 0 ? 'is-nested' : undefined} style={{ marginInlineStart: `${depth(r) * 1.5}rem` }}>
+          <p className="reply-meta">
+            <Link to={`/profile/${r.did}`} className="did">{r.did}</Link>
+            <DateText iso={r.createdAt} />
           </p>
           <p className="notes" dir="auto">{r.body}</p>
           <DeleteButton uri={r.uri} kind="reply" parentUri={r.subjectUri} label="Delete reply" />
