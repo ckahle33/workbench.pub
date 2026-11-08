@@ -99,7 +99,7 @@ img { max-width: 100%; }
   color: var(--muted);
 }
 
-/* A run of metadata: `TOPIC · 5 UPDATES · STARTED 03.03.2026`. */
+/* A run of metadata: `TOPIC · 5 UPDATES · STARTED 03.03.2026 (MM.DD.YYYY)`. */
 .meta-line {
   display: flex;
   flex-wrap: wrap;

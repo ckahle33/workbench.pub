@@ -1,16 +1,11 @@
 import { Link } from 'react-router-dom';
 import { blobUrl, parseImages, parseLinks, parseParts, type UpdateView } from '../api';
+import { formatDate } from '../format';
 import { DeleteButton } from './DeleteButton';
 import { LinkCard } from './LinkCard';
 import { Photo } from './Photo';
 
 const pad = (n: number) => String(n).padStart(2, '0');
-
-/** dd.mm.yyyy, the owner's pinned date format; unparseable input is shown as is. */
-export function formatDate(iso: string): string {
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? iso : `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()}`;
-}
 
 export function DateText({ iso }: { iso: string }) {
   return <time dateTime={iso}>{formatDate(iso)}</time>;

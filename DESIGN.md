@@ -25,7 +25,7 @@ Rules: `--rule` 2px ink (under header, above sections, asides, lists, form secti
 - Mono: IBM Plex Mono 400/500 (`@fontsource/ibm-plex-mono`, latin). Only for metadata, labels, dates, counts, table heads.
 - Scale: project title `clamp(56px, 11vw, 148px)` / .88 / -0.055em / 800 (long titles over 40 chars: `clamp(40px, 6.4vw, 88px)`); profile name `clamp(56px, 10vw, 136px)`; feed/topic title `clamp(56px, 8vw, 72px)`; 404 `clamp(96px, 24vw, 280px)`; form titles `clamp(48px, 9vw, 96px)`; section title 40px/-0.04em; entry heading 30px/-0.03em (24px on phones); card title 28px/700; table title 24px/700; timeline numeral 56px/800/-0.05em (36px on phones).
 - Mono label (`.label`, `.meta-line`): 12-13px, uppercase, 0.04em, `--muted`. Handles and DIDs keep their case (`.as-is`).
-- Dates `dd.mm.yyyy` in `<time dateTime>`; tabular numerals on dates and counts.
+- Dates `MM.DD.YYYY` (US, month first, viewer's local timezone; times as `3:42 pm`), all produced by `src/format.ts`, in `<time dateTime>` with the ISO value; tabular numerals on dates and counts.
 
 ## Components
 
