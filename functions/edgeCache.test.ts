@@ -1,7 +1,7 @@
 import { env } from 'cloudflare:test';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { upsertProject, upsertTopic, upsertUpdate } from '../shared/db';
-import { createApp } from './index';
+import { createApp } from './app';
 
 const realDb = (env as unknown as { DB: D1Database }).DB;
 const ALICE = 'did:plc:alice';
