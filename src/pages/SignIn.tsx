@@ -12,7 +12,7 @@ export function SignIn() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  if (session) return <Navigate to="/" replace />;
+  if (session) return <Navigate to="/feed" replace />;
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();

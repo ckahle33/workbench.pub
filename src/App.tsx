@@ -4,7 +4,8 @@ import { SiteFooter } from './components/SiteFooter';
 import { About } from './pages/About';
 import { NewProject } from './pages/NewProject';
 import { NewUpdate } from './pages/NewUpdate';
-import { Home } from './pages/Home';
+import { Feed } from './pages/Feed';
+import { Landing } from './pages/Splash';
 import { Profile } from './pages/Profile';
 import { Project } from './pages/Project';
 import { SignIn } from './pages/SignIn';
@@ -19,7 +20,7 @@ function NotFound() {
       <h1 id="nf-h">404</h1>
       <p>Page not found. The address may be wrong, or the page was removed.</p>
       <div className="actions">
-        <Link to="/" className="btn btn-primary">
+        <Link to="/feed" className="btn btn-primary">
           Go to the latest updates
         </Link>
       </div>
@@ -36,9 +37,7 @@ function SiteHeader() {
           workbench<span className="dot">.</span>pub
         </Link>
         <nav aria-label="Main" className="site-nav">
-          <NavLink to="/" end>
-            Latest
-          </NavLink>
+          <NavLink to="/feed">Feed</NavLink>
           <NavLink to="/about">About</NavLink>
           {!loading && session && (
             <NavLink to="/new" className="btn btn-primary">
@@ -74,7 +73,8 @@ export function App() {
       <SiteHeader />
       <main id="main" className="page">
         <Routes>
-          <Route path="/" element={<Home />} />
+          <Route path="/" element={<Landing />} />
+          <Route path="/feed" element={<Feed />} />
           <Route path="/t/:slug" element={<Topic />} />
           <Route path="/p/:did/:rkey" element={<Project />} />
           <Route path="/p/:did/:rkey/update" element={<NewUpdate />} />

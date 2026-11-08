@@ -91,7 +91,7 @@ export function About() {
       </section>
 
       <p className="about-actions">
-        <Link to="/" className="btn btn-primary">
+        <Link to="/feed" className="btn btn-primary">
           See the latest updates
         </Link>
       </p>

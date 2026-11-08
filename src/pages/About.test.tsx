@@ -96,19 +96,3 @@ describe('About page', () => {
     expect(within(footer).getByRole('link', { name: /about/i })).toHaveAttribute('href', '/about');
   });
 });
-
-describe('home intro', () => {
-  it('shows for signed-out visitors with two actions', async () => {
-    renderApp('/');
-    const intro = await screen.findByRole('region', { name: /show a project as it gets made/i });
-    expect(within(intro).getByRole('link', { name: /how it works/i })).toHaveAttribute('href', '/about');
-    expect(within(intro).getByRole('link', { name: /sign in/i })).toHaveAttribute('href', '/signin');
-  });
-
-  it('is hidden once signed in', async () => {
-    vi.mocked(restoreSession).mockResolvedValue({ did: 'did:plc:me', handle: 'me.test', agent: {} as never });
-    renderApp('/');
-    await screen.findByText('@me.test');
-    expect(screen.queryByRole('region', { name: /show a project as it gets made/i })).toBeNull();
-  });
-});

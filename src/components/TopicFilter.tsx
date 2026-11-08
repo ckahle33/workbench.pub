@@ -34,7 +34,7 @@ export function TopicFilter({ current }: { current?: string }) {
       <span className="label filter-label">Show</span>
       <ul className="filter-list" ref={listRef}>
         <li>
-          <Link to="/" aria-current={current === undefined ? 'page' : undefined}>
+          <Link to="/feed" aria-current={current === undefined ? 'page' : undefined}>
             All updates
           </Link>
         </li>

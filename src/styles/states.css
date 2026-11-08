@@ -70,11 +70,6 @@
   .about-steps > li::before { font-size: 36px; }
 }
 
-/* Signed-out intro above the feed. */
-.intro { border: var(--rule-thin); padding: var(--s-3); margin-bottom: var(--s-4); }
-.intro h2 { font-size: clamp(26px, 4vw, 36px); letter-spacing: -0.035em; }
-.intro p { margin-top: var(--s-1); max-width: 56ch; font-size: 17px; }
-.intro .actions { margin-top: var(--s-2); display: flex; flex-wrap: wrap; gap: var(--s-1) var(--s-2); }
 
 /* Footer */
 .site-footer { border-top: var(--rule); }

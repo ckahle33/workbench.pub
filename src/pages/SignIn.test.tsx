@@ -18,7 +18,7 @@ function renderPage() {
       <SessionProvider>
         <Routes>
           <Route path="/signin" element={<SignIn />} />
-          <Route path="/" element={<p>home</p>} />
+          <Route path="/feed" element={<p>feed page</p>} />
         </Routes>
       </SessionProvider>
     </MemoryRouter>,
@@ -68,10 +68,10 @@ describe('SignIn page', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Check the handle and try again.');
   });
 
-  it('redirects home when already signed in', async () => {
+  it('redirects to the feed when already signed in', async () => {
     vi.mocked(restoreSession).mockResolvedValue({ did: 'did:plc:abc', handle: 'a.test', agent: {} as Agent });
     renderPage();
-    expect(await screen.findByText('home')).toBeInTheDocument();
+    expect(await screen.findByText('feed page')).toBeInTheDocument();
   });
 
   it('says that the Bluesky post permission is only used if cross-posting is ticked', async () => {

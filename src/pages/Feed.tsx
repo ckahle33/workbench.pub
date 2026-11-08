@@ -8,7 +8,7 @@ import { TopicFilter } from '../components/TopicFilter';
 import { usePaged, useTitle } from '../hooks';
 import { optimistic, useOptimistic } from '../optimistic';
 
-function Feed({ path, empty, emptyAction }: { path: string; empty: string; emptyAction?: ReactNode }) {
+function FeedList({ path, empty, emptyAction }: { path: string; empty: string; emptyAction?: ReactNode }) {
   const feed = usePaged<FeedItem>(path);
   useOptimistic();
   if (feed.phase === 'loading') return <Status kind="loading" />;
@@ -35,8 +35,8 @@ function Feed({ path, empty, emptyAction }: { path: string; empty: string; empty
 
 type View = 'following' | 'everyone';
 
-export function Home() {
-  useTitle('');
+export function Feed() {
+  useTitle('Feed');
   const { session, loading } = useSession();
   const [chosen, setChosen] = useState<View | null>(null);
   // Signed in: what you follow first; anyone else sees everything.
@@ -60,26 +60,12 @@ export function Home() {
             </div>
           )}
         </div>
-        {!loading && !session && (
-          <section className="intro" aria-labelledby="intro-h">
-            <h2 id="intro-h">Show a project as it gets made.</h2>
-            <p>Post dated updates with photos and notes. Your work is saved in your own Bluesky account, and anyone can follow along.</p>
-            <div className="actions">
-              <Link to="/about" className="btn btn-primary">
-                How it works
-              </Link>
-              <Link to="/signin" className="btn">
-                Sign in
-              </Link>
-            </div>
-          </section>
-        )}
         <section aria-labelledby="feed-h" className="feed">
           <h2 id="feed-h" className="visually-hidden">
             {view === 'following' ? 'Following' : 'Everyone'}
           </h2>
           {view === 'following' && session ? (
-            <Feed
+            <FeedList
               key="following"
               path={`/api/feed?following=${encodeURIComponent(session.did)}`}
               empty="Nothing from what you follow yet. Follow a project or topic to see it here."
@@ -90,7 +76,7 @@ export function Home() {
               }
             />
           ) : (
-            <Feed
+            <FeedList
               key="everyone"
               path="/api/feed"
               empty="Nothing here yet."

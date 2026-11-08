@@ -1,0 +1,155 @@
+/* Splash (`/`, signed out). The persuade page: the Workprint grid at its largest. */
+
+.splash-pending { min-height: 70vh; }
+
+/* ---- Hero ------------------------------------------------------------------------ */
+
+.splash-hero h1 {
+  font-size: clamp(56px, 17vw, 208px);
+  line-height: 0.84;
+  letter-spacing: -0.06em;
+  font-weight: 800;
+  overflow-wrap: normal;
+  text-wrap: balance;
+  max-width: 10ch;
+}
+.splash-hero h1 .dot { color: var(--accent); }
+
+.splash-hero-row {
+  margin-top: var(--s-5);
+  padding-top: var(--s-3);
+  border-top: var(--rule);
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  column-gap: var(--gutter);
+  row-gap: var(--s-4);
+  align-items: start;
+}
+.splash-lede { grid-column: span 12; font-size: clamp(20px, 2.2vw, 26px); line-height: 1.3; letter-spacing: -0.015em; max-width: 36ch; }
+.splash-cta { grid-column: span 12; display: flex; flex-direction: column; gap: var(--s-2); }
+@media (min-width: 900px) {
+  .splash-lede { grid-column: span 7; }
+  .splash-cta { grid-column: 9 / span 4; }
+}
+
+.splash-buttons { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2) var(--s-3); }
+.btn-large { min-height: 56px; padding: 16px 24px; font-size: 16px; }
+.splash-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  font-weight: 600;
+  font-size: 16px;
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 0.25em;
+}
+
+/* ---- Sections ---------------------------------------------------------------------- */
+
+.splash-section { margin-top: var(--s-7); }
+.splash-section-head h2, .splash-own h2 {
+  font-size: clamp(40px, 6vw, 72px);
+  line-height: 0.92;
+  letter-spacing: -0.05em;
+  font-weight: 800;
+}
+.splash-section-head { margin-bottom: var(--s-4); }
+.splash-section-head p { margin-top: var(--s-2); font-size: 18px; max-width: 40ch; color: var(--ink-soft); }
+
+/* Example: explanation left, the sample timeline right. */
+.splash-split { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); column-gap: var(--gutter); row-gap: var(--s-4); }
+.splash-split > * { grid-column: span 12; min-width: 0; }
+@media (min-width: 900px) {
+  .splash-split > .splash-aside-head { grid-column: span 4; align-self: start; position: sticky; top: var(--s-3); }
+  .splash-split > .example { grid-column: 6 / span 7; }
+}
+
+.example { margin: 0; }
+.example-head { display: flex; flex-direction: column; gap: var(--s-1); padding-bottom: var(--s-3); }
+.example-flag {
+  color: var(--paper);
+  background: var(--ink);
+  padding: 2px 8px;
+  font-weight: 500;
+}
+.example-title { font-size: clamp(32px, 4vw, 44px); font-weight: 800; letter-spacing: -0.04em; line-height: 1; margin-top: var(--s-1); }
+.example-summary { font-size: 17px; max-width: 44ch; color: var(--ink-soft); }
+.example-timeline .entry-head h3 { font-size: 26px; font-weight: 700; letter-spacing: -0.03em; line-height: 1.1; }
+
+.example-tile {
+  container-type: inline-size;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: var(--s-2);
+  max-width: 440px;
+  aspect-ratio: 4 / 1;
+  padding: 12px var(--s-2);
+}
+.example-tile.tone-dark { background: var(--ink); color: var(--paper); }
+.example-tile.tone-light { border: var(--rule-thin); }
+.example-tile.tone-panel { background: var(--panel); }
+.example-tile-big { font-size: clamp(24px, 8cqi, 40px); font-weight: 800; letter-spacing: -0.05em; line-height: 0.9; }
+.example-tile-small { font-family: var(--mono); font-size: 11px; letter-spacing: 0.04em; }
+@media (max-width: 599px) {
+  .example-tile { aspect-ratio: 3 / 1; }
+  .example-timeline .entry-head h3 { font-size: 22px; }
+}
+
+/* How it works: three numbered steps on a ruled row. */
+.splash-steps {
+  list-style: none;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  border-top: var(--rule);
+}
+.splash-steps > li { padding: var(--s-3) var(--s-3) var(--s-3) 0; border-bottom: var(--rule-hair); }
+@media (min-width: 700px) {
+  .splash-steps { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .splash-steps > li { border-bottom: 0; }
+  .splash-steps > li + li { padding-left: var(--s-3); border-left: var(--rule-hair); }
+}
+.splash-step-num { display: block; font-size: clamp(72px, 9vw, 120px); font-weight: 800; letter-spacing: -0.06em; line-height: 0.85; font-variant-numeric: tabular-nums; }
+.splash-steps h3 { margin-top: var(--s-4); font-size: 24px; font-weight: 700; letter-spacing: -0.025em; }
+.splash-steps p { margin-top: var(--s-1); font-size: 17px; color: var(--ink-soft); max-width: 34ch; }
+.splash-note { margin-top: var(--s-4); font-size: 16px; color: var(--muted); }
+
+/* Yours to keep: one ruled statement. */
+.splash-own {
+  border-top: var(--rule);
+  padding-top: var(--s-3);
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  column-gap: var(--gutter);
+  row-gap: var(--s-3);
+}
+.splash-own > * { grid-column: span 12; min-width: 0; }
+.splash-own-body p { font-size: clamp(19px, 2vw, 22px); line-height: 1.4; max-width: 46ch; }
+.splash-own-body a { display: inline-flex; align-items: center; min-height: 44px; margin-top: var(--s-2); font-weight: 600; }
+@media (min-width: 900px) {
+  .splash-own > h2 { grid-column: span 5; }
+  .splash-own > .splash-own-body { grid-column: 7 / span 6; }
+}
+
+/* Latest: real cards, with a link to the feed beside the title. */
+.splash-latest .splash-section-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: var(--s-2); }
+.splash-more { display: inline-flex; align-items: center; min-height: 44px; font-weight: 600; text-decoration-thickness: 2px; text-underline-offset: 0.25em; }
+
+/* Closing call to action: the one inverted block on the site. */
+.splash-close {
+  margin-top: var(--s-7);
+  padding: var(--s-6) var(--s-5);
+  background: var(--ink);
+  color: var(--paper);
+}
+.splash-close h2 { font-size: clamp(40px, 7vw, 96px); line-height: 0.9; letter-spacing: -0.055em; font-weight: 800; max-width: 14ch; }
+.splash-close .splash-buttons { margin-top: var(--s-5); }
+.splash-close .splash-link { color: var(--paper); }
+.splash-close .splash-link:hover { color: var(--paper); text-decoration-color: var(--accent); }
+.splash-close :focus-visible { outline-color: var(--paper); }
+.btn-inverse { background: var(--paper); color: var(--ink); border-color: var(--paper); }
+.btn-inverse:hover { background: var(--accent); border-color: var(--accent); color: var(--paper); }
+@media (max-width: 599px) {
+  .splash-close { padding: var(--s-5) var(--s-3); margin-inline: calc(-1 * var(--gutter)); }
+}

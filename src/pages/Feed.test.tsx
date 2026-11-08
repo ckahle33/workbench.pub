@@ -4,7 +4,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { restoreSession } from '../auth/oauth';
 import { SessionProvider } from '../auth/SessionContext';
 import { ALICE, BOB, mockApi, project, update } from '../testUtils';
-import { Home } from './Home';
+import { Feed } from './Feed';
 
 vi.mock('../auth/oauth', () => ({ restoreSession: vi.fn(), signOut: vi.fn(), signIn: vi.fn() }));
 
@@ -18,7 +18,7 @@ function renderPage() {
   return render(
     <MemoryRouter>
       <SessionProvider>
-        <Home />
+        <Feed />
       </SessionProvider>
     </MemoryRouter>,
   );
@@ -27,7 +27,7 @@ function renderPage() {
 beforeEach(() => vi.mocked(restoreSession).mockResolvedValue(null));
 afterEach(() => vi.resetAllMocks());
 
-describe('Home', () => {
+describe('Feed', () => {
   it('shows the global list when signed out, with no Following section', async () => {
     const fx = mockApi((u) => (u.pathname === '/api/topics' ? TOPICS : { items: [feedItem(1, 'Global post')], cursor: null }));
     renderPage();
