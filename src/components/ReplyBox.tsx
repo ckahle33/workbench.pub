@@ -3,7 +3,7 @@ import { useSession } from '../auth/SessionContext';
 import { optimistic } from '../optimistic';
 import { createReply } from '../records/write';
 import { LIMITS } from '../../shared/lexicons';
-import { TextField, writeErrorMessage } from './Composer';
+import { afterWrite, POSTED_TEXT, TextField, writeErrorMessage } from './Composer';
 
 /** Reply form for the signed-in user; renders nothing when signed out. */
 export function ReplyBox({ subjectUri }: { subjectUri: string }) {
@@ -11,6 +11,7 @@ export function ReplyBox({ subjectUri }: { subjectUri: string }) {
   const [body, setBody] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [posted, setPosted] = useState(false);
   if (!session) return null;
 
   async function onSubmit(e: FormEvent) {
@@ -22,21 +23,27 @@ export function ReplyBox({ subjectUri }: { subjectUri: string }) {
       return;
     }
     setError(null);
+    setPosted(false);
     setBusy(true);
+    let uri: string;
     try {
-      const { uri } = await createReply(session, { subject: subjectUri, body: text });
-      optimistic.add({ kind: 'reply', uri, did: session.did, subjectUri, body: text, createdAt: new Date().toISOString() });
-      setBody('');
+      ({ uri } = await createReply(session, { subject: subjectUri, body: text }));
     } catch (err) {
-      setError(writeErrorMessage(err));
-    } finally {
+      setError(writeErrorMessage(err, 'post your reply'));
       setBusy(false);
+      return;
     }
+    // Saved. Clear the box first so a retry cannot post the same text again.
+    afterWrite(() => setBody(''));
+    afterWrite(() => optimistic.add({ kind: 'reply', uri, did: session.did, subjectUri, body: text, createdAt: new Date().toISOString() }));
+    afterWrite(() => setPosted(true));
+    afterWrite(() => setBusy(false));
   }
 
   return (
     <form onSubmit={(e) => void onSubmit(e)} noValidate className="reply-box">
       <TextField label="Your reply" value={body} onChange={setBody} max={LIMITS.replyBody} multiline error={error ?? undefined} />
+      {posted && <p role="status" className="meta">{POSTED_TEXT}</p>}
       <button type="submit" aria-disabled={busy || undefined}>
         {busy ? 'Posting…' : 'Post reply'}
       </button>

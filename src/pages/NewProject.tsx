@@ -1,7 +1,7 @@
 import { useRef, useState, type FormEvent } from 'react';
 import { flushSync } from 'react-dom';
-import { useNavigate } from 'react-router-dom';
-import { FieldError, focusFirstInvalid, SignInPrompt, TextField, TopicSelector, writeErrorMessage } from '../components/Composer';
+import { Link, useNavigate } from 'react-router-dom';
+import { afterWrite, FieldError, POSTED_TEXT, focusFirstInvalid, SignInPrompt, TextField, TopicSelector, writeErrorMessage } from '../components/Composer';
 import { Status } from '../components/Status';
 import { useSession } from '../auth/SessionContext';
 import { useTitle } from '../hooks';
@@ -26,6 +26,7 @@ export function NewProject() {
   const [errors, setErrors] = useState<{ title?: string; summary?: string; topic?: string }>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [postedHref, setPostedHref] = useState<string | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
 
   if (loading) return <Status kind="loading" />;
@@ -47,16 +48,33 @@ export function NewProject() {
     }
     setErrors(next);
     setBusy(true);
+    const t = title.trim();
+    const s = summary.trim();
+    let uri: string;
     try {
-      const t = title.trim();
-      const s = summary.trim();
-      const { uri } = await createProject(session, { title: t, summary: s, topic, status });
-      optimistic.add({ kind: 'project', uri, did: session.did, createdAt: new Date().toISOString(), title: t, summary: s, topicSlug: topic, status });
-      navigate(`/p/${session.did}/${uri.split('/').pop()}`);
+      ({ uri } = await createProject(session, { title: t, summary: s, topic, status }));
     } catch (err) {
-      setSubmitError(writeErrorMessage(err));
+      setSubmitError(writeErrorMessage(err, 'create your project'));
       setBusy(false);
+      return;
     }
+    // Saved. From here nothing may be reported as a failure, and the form stays locked (no duplicate).
+    const href = `/p/${session.did}/${uri.split('/').pop()}`;
+    afterWrite(() => optimistic.add({ kind: 'project', uri, did: session.did, createdAt: new Date().toISOString(), title: t, summary: s, topicSlug: topic, status }));
+    afterWrite(() => setPostedHref(href));
+    afterWrite(() => navigate(href));
+  }
+
+  if (postedHref) {
+    return (
+      <section className="form-page">
+        <h1>New project</h1>
+        <p role="status">{POSTED_TEXT}</p>
+        <p>
+          <Link to={postedHref}>View your project</Link>
+        </p>
+      </section>
+    );
   }
 
   return (

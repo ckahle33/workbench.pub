@@ -1,8 +1,19 @@
 import { useId, useState, type FormEvent } from 'react';
 import { api, ApiError } from '../api';
-import { FieldError, GENERIC_ERROR, TextField } from './Composer';
+import { logFailure } from '../records/errors';
+import { afterWrite, FieldError, GENERIC_ERROR, TextField } from './Composer';
 
 const REASON_MAX = 500;
+const reportedKey = (uri: string) => `wb.reported:${uri}`;
+
+/** Remembered in this browser so the same post is not reported twice by accident. */
+function wasReported(uri: string): boolean {
+  try {
+    return window.localStorage.getItem(reportedKey(uri)) === '1';
+  } catch {
+    return false;
+  }
+}
 
 function message(e: unknown): string {
   const status = e instanceof ApiError ? e.status : 0;
@@ -19,7 +30,7 @@ export function ReportButton({ uri }: { uri: string }) {
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [sent, setSent] = useState(false);
+  const [sent, setSent] = useState(() => wasReported(uri));
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -28,9 +39,11 @@ export function ReportButton({ uri }: { uri: string }) {
     setError(null);
     try {
       await api.post('/api/report', { uri, reason: reason.trim() });
-      setSent(true);
-      setOpen(false);
+      afterWrite(() => window.localStorage.setItem(reportedKey(uri), '1'));
+      afterWrite(() => setSent(true));
+      afterWrite(() => setOpen(false));
     } catch (err) {
+      logFailure({ stage: 'create', status: err instanceof ApiError ? err.status : 1, errorName: 'ReportFailed' });
       setError(message(err));
     } finally {
       setBusy(false);

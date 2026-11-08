@@ -4,14 +4,40 @@ import { safeHttpUrl } from '../api';
 import { useSession } from '../auth/SessionContext';
 import { usePaged } from '../hooks';
 import { LIMITS, normalizeSlug } from '../../shared/lexicons';
+import { failureMessage, logFailure, sanitize, WriteError } from '../records/errors';
 import { createTopic } from '../records/write';
 import { LoadMore, Status } from './Status';
 
 export const GENERIC_ERROR = 'Something went wrong. Please try again.';
 
-/** Writers throw messages that start with "Could not" for network failures; anything else gets a generic message. */
-export function writeErrorMessage(e: unknown): string {
+/**
+ * The plain-language message for a failed write. Failures tagged by write.ts carry a stage,
+ * status and error name, which go into the message so they can be pasted into a bug report;
+ * anything else gets a generic message (never raw server text).
+ */
+export function writeErrorMessage(e: unknown, action = 'save that'): string {
+  if (e instanceof WriteError) {
+    return e.stage === 'validate' ? `Could not ${action}. ${e.message}. Check what you entered and try again.` : failureMessage(action, e);
+  }
   return e instanceof Error && /^Could not [\w ]+\.( Please try again\.)?$/.test(e.message) ? e.message : GENERIC_ERROR;
+}
+
+export const POSTED_TEXT = 'Posted. It can take a minute to appear for everyone.';
+
+/**
+ * Runs a step that follows a successful write (optimistic item, navigation, state). A throw is
+ * logged as stage "after-write" and swallowed: a saved record must never be reported as a failure.
+ */
+export function afterWrite(step: () => void): void {
+  try {
+    step();
+  } catch (e) {
+    logFailure({
+      stage: 'after-write',
+      errorName: e instanceof Error ? sanitize(e.name, 60) : undefined,
+      serverMessage: e instanceof Error ? e.message : undefined,
+    });
+  }
 }
 
 /** After a failed validation, move focus to the first invalid control (call after the errors have rendered). */
@@ -347,12 +373,14 @@ export function TopicSelector({ value, onChange, error }: { value: string | null
     setBusy(true);
     try {
       const made = await createTopic(session, { name: name.trim(), description: '' });
-      setExtras((x) => [...x, { uri: made.uri, slug: made.slug, name: name.trim(), description: '' }]);
-      setCreating(false);
-      setName('');
-      onChange(made.slug);
+      afterWrite(() => setExtras((x) => [...x, { uri: made.uri, slug: made.slug, name: name.trim(), description: '' }]));
+      afterWrite(() => {
+        setCreating(false);
+        setName('');
+      });
+      afterWrite(() => onChange(made.slug));
     } catch (e) {
-      setCreateError(writeErrorMessage(e));
+      setCreateError(writeErrorMessage(e, 'create the topic'));
     } finally {
       setBusy(false);
     }

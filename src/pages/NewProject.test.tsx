@@ -8,6 +8,21 @@ import { NewProject } from './NewProject';
 const h = vi.hoisted(() => ({ session: null as unknown }));
 vi.mock('../auth/SessionContext', () => ({ useSession: () => ({ session: h.session, loading: false, signOut: vi.fn() }) }));
 vi.mock('../records/write', () => ({ createProject: vi.fn(), createTopic: vi.fn() }));
+const nav = vi.hoisted(() => ({ throws: false }));
+vi.mock('react-router-dom', async (orig) => {
+  const actual = await orig<typeof import('react-router-dom')>();
+  return {
+    ...actual,
+    useNavigate: () => {
+      const real = actual.useNavigate();
+      return nav.throws
+        ? () => {
+            throw new Error('navigation broke');
+          }
+        : real;
+    },
+  };
+});
 
 const topics = [
   { uri: 'at://x/pub.workbench.topic/a', slug: 'synths', name: 'Synthesizers', description: '' },
@@ -32,6 +47,8 @@ beforeEach(() => {
   mockApi((u) => (u.pathname === '/api/topics' ? { items: topics, cursor: null } : undefined));
 });
 afterEach(() => {
+  nav.throws = false;
+  vi.restoreAllMocks();
   vi.resetAllMocks();
   optimistic.clear();
 });
@@ -183,5 +200,40 @@ describe('NewProject', () => {
     await screen.findByText(/something went wrong/i);
     expect(screen.getByRole('button', { name: /create project/i })).not.toHaveAttribute('aria-disabled');
     expect(document.activeElement).toBe(btn);
+  });
+
+  async function fillValid() {
+    renderPage();
+    await screen.findByRole('option', { name: /Synthesizers/ });
+    fill(/^title/i, 'T');
+    fill(/summary/i, 'S');
+    fireEvent.change(screen.getByLabelText(/^topic/i), { target: { value: 'synths' } });
+  }
+
+  it('shows success, not an error, when optimistic.add throws after the write', async () => {
+    vi.mocked(createProject).mockResolvedValue({ uri: `at://${ALICE}/pub.workbench.project/abc` });
+    vi.spyOn(optimistic, 'add').mockImplementation(() => {
+      throw new Error('store broke');
+    });
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    await fillValid();
+    fireEvent.click(screen.getByRole('button', { name: /create project/i }));
+    expect(await screen.findByText('project page')).toBeInTheDocument();
+    expect(createProject).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows a posted notice with a link, no error and no second submit, when navigation throws', async () => {
+    vi.mocked(createProject).mockResolvedValue({ uri: `at://${ALICE}/pub.workbench.project/abc` });
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    nav.throws = true;
+    await fillValid();
+    fireEvent.click(screen.getByRole('button', { name: /create project/i }));
+    expect(await screen.findByRole('status')).toHaveTextContent(/posted\. it can take a minute/i);
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.getByRole('link', { name: /view your project/i })).toHaveAttribute('href', `/p/${ALICE}/abc`);
+    expect(screen.queryByRole('button', { name: /create project/i })).toBeNull();
+    expect(createProject).toHaveBeenCalledTimes(1);
+    expect(err).toHaveBeenCalledTimes(1);
+    expect(String(err.mock.calls[0][0])).toMatch(/stage=after-write.*navigation broke/);
   });
 });

@@ -7,6 +7,17 @@ import { FollowButton } from './FollowButton';
 const h = vi.hoisted(() => ({ session: null as unknown }));
 vi.mock('../auth/SessionContext', () => ({ useSession: () => ({ session: h.session, loading: false, signOut: vi.fn() }) }));
 vi.mock('../records/write', () => ({ followSubject: vi.fn(), deleteRecord: vi.fn() }));
+const store = vi.hoisted(() => ({ throws: false }));
+vi.mock('../follows', async (orig) => {
+  const actual = await orig<typeof import('../follows')>();
+  return {
+    ...actual,
+    setFollow: (...a: Parameters<typeof actual.setFollow>) => {
+      if (store.throws) throw new Error('storage broke');
+      actual.setFollow(...a);
+    },
+  };
+});
 
 const ui = (kind: 'topic' | 'project', subject: string) => (
   <MemoryRouter>
@@ -56,5 +67,19 @@ describe('FollowButton', () => {
     const alert = await screen.findByRole('alert');
     expect(alert.textContent).not.toMatch(/raw/);
     await waitFor(() => expect(screen.getByRole('button', { name: 'Follow' })).not.toHaveAttribute('aria-disabled'));
+  });
+
+  it('shows Unfollow, not an error, when remembering the follow fails after the write', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    store.throws = true;
+    vi.mocked(followSubject).mockResolvedValue({ uri: `at://${ALICE}/pub.workbench.follow/f9` });
+    render(ui('topic', 'robots'));
+    fireEvent.click(screen.getByRole('button', { name: 'Follow' }));
+    expect(await screen.findByRole('button', { name: 'Unfollow' })).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(followSubject).toHaveBeenCalledTimes(1);
+    expect(String(err.mock.calls[0][0])).toMatch(/stage=after-write/);
+    err.mockRestore();
+    store.throws = false;
   });
 });

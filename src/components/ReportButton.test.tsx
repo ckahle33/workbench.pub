@@ -15,7 +15,16 @@ const respond = (status: number) => {
 const open = () => fireEvent.click(screen.getByRole('button', { name: /^report/i }));
 const send = () => fireEvent.click(screen.getByRole('button', { name: /send report/i }));
 
-afterEach(() => api.setFetch(null));
+let errSpy: ReturnType<typeof vi.spyOn>;
+beforeEach(() => {
+  localStorage.clear();
+  errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+});
+afterEach(() => {
+  api.setFetch(null);
+  errSpy.mockRestore();
+  vi.restoreAllMocks();
+});
 
 describe('ReportButton', () => {
   it('posts the uri and reason', async () => {
@@ -46,5 +55,33 @@ describe('ReportButton', () => {
     expect(alert).toHaveTextContent(re);
     expect(alert.textContent).not.toMatch(/raw server/);
     await waitFor(() => expect(screen.getByRole('button', { name: /send report/i })).not.toHaveAttribute('aria-disabled'));
+  });
+
+  it('still shows success when remembering the report fails, and logs it as after-write', async () => {
+    respond(201);
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('quota');
+    });
+    vi.spyOn(localStorage, 'setItem').mockImplementation(() => {
+      throw new Error('quota');
+    });
+    render(<ReportButton uri={URI} />);
+    open();
+    send();
+    expect(await screen.findByText(/thanks/i)).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(errSpy).toHaveBeenCalledTimes(1);
+    expect(String(errSpy.mock.calls[0][0])).toMatch(/stage=after-write/);
+    expect(calls).toHaveLength(1);
+  });
+
+  it('logs exactly one sanitized line for a failed report', async () => {
+    respond(503);
+    render(<ReportButton uri={URI} />);
+    open();
+    send();
+    await screen.findByRole('alert');
+    expect(errSpy).toHaveBeenCalledTimes(1);
+    expect(String(errSpy.mock.calls[0][0])).toBe('[write] stage=create status=503 error=ReportFailed message=""');
   });
 });

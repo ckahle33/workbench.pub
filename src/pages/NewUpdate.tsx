@@ -4,7 +4,9 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   cleanLinks,
   cleanParts,
+  afterWrite,
   FieldError,
+  POSTED_TEXT,
   focusFirstInvalid,
   ImagePicker,
   LinkList,
@@ -44,6 +46,7 @@ export function NewUpdate() {
   const [showAltErrors, setShowAltErrors] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [postedHref, setPostedHref] = useState<string | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
 
   if (loading) return <Status kind="loading" />;
@@ -102,31 +105,55 @@ export function NewUpdate() {
         }
         files.push({ file: new File([blob], `photo-${n + 1}.jpg`, { type: blob.type || 'image/jpeg' }), alt: img.alt.trim() });
       }
-      const result = await createUpdate(session, {
-        project: projectUri,
-        heading: heading.trim(),
-        body: body.trim(),
-        images: files,
-        links: l.value,
-        parts: p.value,
-      });
-      optimistic.add({
-        kind: 'update',
-        uri: result.uri,
-        did: session.did,
-        createdAt: new Date().toISOString(),
-        projectUri,
-        heading: heading.trim(),
-        body: body.trim(),
-        images: plainImages(result.images),
-        links: l.value,
-        parts: p.value,
-      });
-      navigate(`/p/${did}/${rkey}`);
+      let result: Awaited<ReturnType<typeof createUpdate>>;
+      try {
+        result = await createUpdate(session, {
+          project: projectUri,
+          heading: heading.trim(),
+          body: body.trim(),
+          images: files,
+          links: l.value,
+          parts: p.value,
+        });
+      } catch (err) {
+        setSubmitError(writeErrorMessage(err, 'post your update'));
+        setBusy(false);
+        return;
+      }
+      // Saved. From here nothing may be reported as a failure, and the form stays locked (no duplicate).
+      const href = `/p/${did}/${rkey}`;
+      afterWrite(() =>
+        optimistic.add({
+          kind: 'update',
+          uri: result.uri,
+          did: session.did,
+          createdAt: new Date().toISOString(),
+          projectUri,
+          heading: heading.trim(),
+          body: body.trim(),
+          images: plainImages(result.images),
+          links: l.value,
+          parts: p.value,
+        }),
+      );
+      afterWrite(() => setPostedHref(href));
+      afterWrite(() => navigate(href));
     } catch (err) {
-      setSubmitError(err instanceof PhotoError ? err.message : writeErrorMessage(err));
+      setSubmitError(err instanceof PhotoError ? err.message : writeErrorMessage(err, 'post your update'));
       setBusy(false);
     }
+  }
+
+  if (postedHref) {
+    return (
+      <section className="form-page">
+        <h1>Add update</h1>
+        <p role="status">{POSTED_TEXT}</p>
+        <p>
+          <Link to={postedHref}>Back to the project</Link>
+        </p>
+      </section>
+    );
   }
 
   return (

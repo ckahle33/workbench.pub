@@ -9,6 +9,21 @@ import { NewUpdate } from './NewUpdate';
 const h = vi.hoisted(() => ({ session: null as unknown }));
 vi.mock('../auth/SessionContext', () => ({ useSession: () => ({ session: h.session, loading: false, signOut: vi.fn() }) }));
 vi.mock('../records/write', () => ({ createUpdate: vi.fn() }));
+const nav = vi.hoisted(() => ({ throws: false }));
+vi.mock('react-router-dom', async (orig) => {
+  const actual = await orig<typeof import('react-router-dom')>();
+  return {
+    ...actual,
+    useNavigate: () => {
+      const real = actual.useNavigate();
+      return nav.throws
+        ? () => {
+            throw new Error('navigation broke');
+          }
+        : real;
+    },
+  };
+});
 vi.mock('../records/image', async (importOriginal) => ({
   ImageTooLargeError: (await importOriginal<typeof import('../records/image')>()).ImageTooLargeError,
   resizeImage: vi.fn(),
@@ -37,6 +52,8 @@ beforeEach(() => {
   vi.mocked(resizeImage).mockImplementation(async (f: File) => new Blob([`resized-${f.name}`], { type: 'image/jpeg' }));
 });
 afterEach(() => {
+  nav.throws = false;
+  vi.restoreAllMocks();
   vi.resetAllMocks();
   optimistic.clear();
 });
@@ -234,5 +251,35 @@ describe('NewUpdate', () => {
       expect(await screen.findByText('Photo 3 is too large (over 25 MB). Choose a smaller one.')).toBeInTheDocument();
       expect(createUpdate).not.toHaveBeenCalled();
     });
+  });
+
+  it('shows success, not an error, when optimistic.add throws after the write', async () => {
+    vi.mocked(createUpdate).mockResolvedValue({ uri: `at://${ALICE}/pub.workbench.update/u1`, images: [] });
+    vi.spyOn(optimistic, 'add').mockImplementation(() => {
+      throw new Error('store broke');
+    });
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    renderPage();
+    fill(/heading/i, 'h');
+    fill(/notes/i, 'n');
+    submit();
+    expect(await screen.findByText('timeline page')).toBeInTheDocument();
+    expect(createUpdate).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows a posted notice, no error and no second submit, when navigation throws', async () => {
+    vi.mocked(createUpdate).mockResolvedValue({ uri: `at://${ALICE}/pub.workbench.update/u1`, images: [] });
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    nav.throws = true;
+    renderPage();
+    fill(/heading/i, 'h');
+    fill(/notes/i, 'n');
+    submit();
+    expect(await screen.findByRole('status')).toHaveTextContent(/posted\. it can take a minute/i);
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.queryByRole('button', { name: /post update/i })).toBeNull();
+    expect(createUpdate).toHaveBeenCalledTimes(1);
+    expect(err).toHaveBeenCalledTimes(1);
+    expect(String(err.mock.calls[0][0])).toMatch(/stage=after-write/);
   });
 });

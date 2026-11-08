@@ -4,7 +4,7 @@ import { useSession } from '../auth/SessionContext';
 import { clearFollow, getFollow, setFollow } from '../follows';
 import { deleteRecord, followSubject } from '../records/write';
 import type { Session } from '../auth/oauth';
-import { FieldError } from './Composer';
+import { afterWrite, FieldError, writeErrorMessage } from './Composer';
 
 interface Props {
   kind: 'topic' | 'project';
@@ -24,15 +24,16 @@ function Toggle({ session, kind, subject }: Props & { session: Session }) {
     try {
       if (followUri) {
         await deleteRecord(session, followUri);
-        clearFollow(session.did, kind, subject);
-        setFollowUri(null);
+        afterWrite(() => clearFollow(session.did, kind, subject));
+        afterWrite(() => setFollowUri(null));
       } else {
         const { uri } = await followSubject(session, kind, subject);
-        setFollow(session.did, kind, subject, uri);
-        setFollowUri(uri);
+        // The button flips to Unfollow even if remembering the follow fails, so it cannot be followed twice.
+        afterWrite(() => setFollow(session.did, kind, subject, uri));
+        afterWrite(() => setFollowUri(uri));
       }
-    } catch {
-      setError(followUri ? 'Could not unfollow. Please try again.' : 'Could not follow. Please try again.');
+    } catch (e) {
+      setError(writeErrorMessage(e, followUri ? 'unfollow' : 'follow'));
     } finally {
       setBusy(false);
     }
