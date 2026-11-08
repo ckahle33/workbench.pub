@@ -454,6 +454,11 @@ describe('static shell and routing config', () => {
       'theme-color': '#ffffff',
     });
     expect(indexHtml).toMatch(/<link rel="icon" href="\/favicon.svg" type="image\/svg\+xml"/);
+    // favicon.ico first (crawlers, RSS readers, older browsers), then the SVG.
+    const ico = indexHtml.indexOf('<link rel="icon" href="/favicon.ico" sizes="32x32" />');
+    expect(ico).toBeGreaterThan(-1);
+    expect(ico).toBeLessThan(indexHtml.indexOf('href="/favicon.svg"'));
+    expect(indexHtml).toContain('<link rel="apple-touch-icon" href="/apple-touch-icon.png" />');
   });
 
   it('run_worker_first sends only /api and the four share routes to the Worker, never static assets', () => {
@@ -467,7 +472,7 @@ describe('static shell and routing config', () => {
     for (const path of [`/p/${ALICE}/p1`, `/p/${ALICE}/p1/update`, `/u/${ALICE}/u1`, '/t/electronics', `/profile/${ALICE}`, '/api/feed']) {
       expect(hitsWorker(path), path).toBe(true);
     }
-    for (const path of ['/', '/feed', '/about', '/new', '/signin', '/assets/index-abc.js', '/assets/inter-tight.woff2', '/og.png', '/favicon.svg', '/apple-touch-icon.png', '/client-metadata.json', '/index.html', '/profile', '/people/x']) {
+    for (const path of ['/', '/feed', '/about', '/new', '/signin', '/assets/index-abc.js', '/assets/inter-tight.woff2', '/og.png', '/favicon.ico', '/favicon.svg', '/apple-touch-icon.png', '/client-metadata.json', '/index.html', '/profile', '/people/x']) {
       expect(hitsWorker(path), path).toBe(false);
     }
   });
