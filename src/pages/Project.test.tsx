@@ -52,7 +52,8 @@ describe('Project page', () => {
     renderPage();
     expect(await screen.findByRole('heading', { level: 1, name: 'Project 1' })).toBeInTheDocument();
     expect(screen.getByText('@alice.test')).toBeInTheDocument();
-    expect(screen.getByText('In progress')).toBeInTheDocument();
+    // In the meta line and again in the facts aside.
+    expect(screen.getAllByText('In progress').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText('Summary 1')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /synths/ })).toHaveAttribute('href', '/t/synths');
 
@@ -168,6 +169,39 @@ describe('Project page pagination', () => {
     expect(names[0]).toBe('Mine');
     expect(fx.calls.at(-1)!.searchParams.get('cursor')).toBe('20:at://c');
     expect(screen.queryByRole('button', { name: /load more/i })).toBeNull();
+  });
+});
+
+describe('Project page numbering', () => {
+  const numerals = () => screen.getAllByRole('article').map((a) => a.querySelector('.entry-num')?.textContent);
+
+  it('numbers updates from the server total, oldest = 01, newest on top in the accent', async () => {
+    serve([update(3, { heading: 'Third' }), update(2, { heading: 'Second' }), update(1, { heading: 'First' })], project(1, { updateCount: 3 }));
+    renderPage();
+    await screen.findByRole('heading', { level: 2, name: 'Third' });
+    expect(numerals()).toEqual(['Update 03', 'Update 02', 'Update 01']);
+    const [newest, next] = screen.getAllByRole('article').map((a) => a.querySelector('.entry-num')!);
+    expect(newest).toHaveClass('is-newest');
+    expect(next).not.toHaveClass('is-newest');
+    expect(screen.getByText('3 updates')).toBeInTheDocument();
+  });
+
+  it('keeps numbers correct across Load more pages and gives a just-posted update the next number', async () => {
+    optimistic.add({
+      kind: 'update', uri: `at://${ALICE}/pub.workbench.update/fresh`, did: ALICE, projectUri: project(1).uri,
+      heading: 'Fresh', body: 'x', createdAt: '2026-11-08T10:00:00.000Z',
+    });
+    mockApi((u) => {
+      if (u.pathname !== `/api/projects/${ALICE}/p1`) return undefined;
+      const proj = project(1, { updateCount: 30 });
+      return u.searchParams.get('cursor')
+        ? { project: proj, author, items: [update(5, { uri: `at://${ALICE}/pub.workbench.update/old`, heading: 'Older' })], cursor: null }
+        : { project: proj, author, items: [update(6, { heading: 'Newer' })], cursor: '1:at://c' };
+    });
+    renderPage();
+    // The short first page pulls the next page automatically (bounded retries).
+    await screen.findByRole('heading', { level: 2, name: 'Older' });
+    expect(numerals()).toEqual(['Update 31', 'Update 30', 'Update 29']);
   });
 });
 

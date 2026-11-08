@@ -51,6 +51,10 @@ function Toggle({ session, kind, subject }: Props & { session: Session }) {
 export function FollowButton(props: Props) {
   const { session, loading } = useSession();
   if (loading) return null;
-  if (!session) return <Link to="/signin">Sign in to follow</Link>;
+  if (!session) return (
+    <Link to="/signin" className="btn">
+      Sign in to follow
+    </Link>
+  );
   return <Toggle key={`${session.did}|${props.kind}|${props.subject}`} session={session} {...props} />;
 }

@@ -40,11 +40,11 @@ export function ReportButton({ uri }: { uri: string }) {
   if (sent) return <p className="meta" role="status">Thanks, your report was sent.</p>;
   return (
     <div className="report">
-      <button type="button" aria-expanded={open} aria-controls={panel} onClick={() => setOpen((o) => !o)}>
+      <button type="button" className="btn-text" aria-expanded={open} aria-controls={panel} onClick={() => setOpen((o) => !o)}>
         Report
       </button>
       {open && (
-        <form id={panel} onSubmit={(e) => void onSubmit(e)} noValidate>
+        <form id={panel} className="report-form" onSubmit={(e) => void onSubmit(e)} noValidate>
           <TextField label="Reason (optional)" value={reason} onChange={setReason} max={REASON_MAX} multiline />
           <FieldError id={`${panel}-err`}>{error}</FieldError>
           <button type="submit" aria-disabled={busy || undefined}>

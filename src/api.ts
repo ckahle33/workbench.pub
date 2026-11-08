@@ -76,6 +76,8 @@ export interface ProjectView {
   cover?: unknown;
   createdAt: string;
   indexedAt: number;
+  /** Project page only: visible updates on the server, for numbering the timeline. */
+  updateCount?: number;
 }
 
 export interface ReplyView {

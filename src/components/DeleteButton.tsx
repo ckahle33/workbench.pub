@@ -46,7 +46,7 @@ function Confirmable({ session, uri, kind, parentUri, label, onDeleted }: Props 
 
   if (!confirming) {
     return (
-      <button ref={startRef} type="button" className="delete" onClick={() => setConfirming(true)}>
+      <button ref={startRef} type="button" className="delete btn-small" onClick={() => setConfirming(true)}>
         {label}
       </button>
     );
@@ -56,14 +56,16 @@ function Confirmable({ session, uri, kind, parentUri, label, onDeleted }: Props 
       <button
         ref={confirmRef}
         type="button"
+        className="btn-small btn-danger"
         aria-disabled={busy || undefined}
         aria-describedby={error ? errId : undefined}
         onClick={() => void confirm()}
       >
         {busy ? 'Deleting…' : 'Confirm delete'}
-      </button>{' '}
+      </button>
       <button
         type="button"
+        className="btn-small"
         onClick={() => {
           if (busy) return;
           returnFocus.current = true;
