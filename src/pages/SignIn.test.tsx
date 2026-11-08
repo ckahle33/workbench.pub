@@ -73,4 +73,10 @@ describe('SignIn page', () => {
     renderPage();
     expect(await screen.findByText('home')).toBeInTheDocument();
   });
+
+  it('says that the Bluesky post permission is only used if cross-posting is ticked', async () => {
+    vi.mocked(restoreSession).mockResolvedValue(null);
+    renderPage();
+    expect(await screen.findByText(/asks permission to create bluesky posts.*only used if you tick/i)).toBeInTheDocument();
+  });
 });

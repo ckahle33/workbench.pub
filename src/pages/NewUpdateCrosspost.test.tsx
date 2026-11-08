@@ -90,6 +90,16 @@ describe('cross-post to Bluesky (opt-in)', () => {
     expect(await screen.findByText(/deleting the update later does not delete the bluesky post/i)).toBeInTheDocument();
   });
 
+  it('blocks typing past the byte limit with multi-codepoint emoji and says so', async () => {
+    renderPage();
+    fireEvent.click(box());
+    const caption = (await screen.findByLabelText(/bluesky caption/i)) as HTMLTextAreaElement;
+    fireEvent.change(caption, { target: { value: '👨‍👩‍👧‍👦'.repeat(150) } });
+    expect(new TextEncoder().encode(caption.value).length).toBeLessThanOrEqual(3000 - 60);
+    expect(caption.value.length).toBeLessThan('👨‍👩‍👧‍👦'.repeat(150).length);
+    expect(screen.getByText(/size limit nearly reached/i)).toBeInTheDocument();
+  });
+
   it('prefills an editable caption from the project title and heading, with a grapheme counter and a note about the link', async () => {
     renderPage();
     fill(/heading/i, 'Cut the panel');

@@ -26,7 +26,7 @@ import { useTitle } from '../hooks';
 import { optimistic } from '../optimistic';
 import { ImageTooLargeError, resizeImage } from '../records/image';
 import { plainImages } from '../records/blobs';
-import { buildCaption, captionBudget, createCrosspost, permalink } from '../records/crosspost';
+import { buildCaption, captionBudget, clipCaption, createCrosspost, permalink } from '../records/crosspost';
 import { crosspostFailureNotice } from '../records/errors';
 import { createUpdate } from '../records/write';
 import { LIMITS } from '../../shared/lexicons';
@@ -82,7 +82,7 @@ export function NewUpdate() {
   const storageKey = session ? `wb.crosspost:${session.did}` : '';
   const crosspost = crosspostChoice ?? readFlag(storageKey);
   const budget = captionBudget(did);
-  const caption = captionEdit ?? buildCaption({ heading, body, projectTitle }, budget);
+  const caption = captionEdit ?? clipCaption(buildCaption({ heading, body, projectTitle }, budget), did);
 
   function chooseCrosspost(v: boolean) {
     setCrosspostChoice(v);

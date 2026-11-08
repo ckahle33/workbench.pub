@@ -1,6 +1,6 @@
 import { useId } from 'react';
 import { FieldError } from './Composer';
-import { clipGraphemes, graphemeLength, linkLengthFor } from '../records/crosspost';
+import { clipCaption, CROSSPOST_MAX_BYTES, graphemeLength, linkLengthFor } from '../records/crosspost';
 
 interface Props {
   did: string;
@@ -16,6 +16,8 @@ interface Props {
 export function CrosspostBox({ did, checked, onChecked, caption, onCaption, budget, error }: Props) {
   const id = useId();
   const left = budget - graphemeLength(caption);
+  // Emoji sequences and some scripts are many bytes each; Bluesky also caps the text at 3000 bytes.
+  const bytesLeft = CROSSPOST_MAX_BYTES - linkLengthFor(did) - 1 - new TextEncoder().encode(caption).length;
   return (
     <fieldset className="field crosspost">
       <legend>Bluesky</legend>
@@ -33,10 +35,11 @@ export function CrosspostBox({ did, checked, onChecked, caption, onCaption, budg
             value={caption}
             aria-invalid={error ? true : undefined}
             aria-describedby={`${error ? `${id}-err ` : ''}${id}-note ${id}-count`}
-            onChange={(e) => onCaption(clipGraphemes(e.target.value, budget))}
+            onChange={(e) => onCaption(clipCaption(e.target.value, did))}
           />
           <p id={`${id}-count`} className="meta">
             {left} characters left. The link back takes {linkLengthFor(did) + 1} of Bluesky's 300.
+            {bytesLeft < 100 && ' Size limit nearly reached: emoji and some scripts count extra.'}
           </p>
           <FieldError id={`${id}-err`}>{error}</FieldError>
           <p id={`${id}-note`} className="meta">

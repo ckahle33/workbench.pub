@@ -41,6 +41,7 @@ export function SignIn() {
       <p className="form-intro">
         Use your Bluesky or other AT Protocol account. Your projects are saved in that account, not on this site.
       </p>
+      <p className="meta">Signing in asks permission to create Bluesky posts. It is only used if you tick "Also post this to Bluesky" on an update.</p>
       <form onSubmit={onSubmit} noValidate className="signin-form">
         <label htmlFor="handle">Your AT Protocol handle</label>
         <div className="signin-row">

@@ -2,6 +2,8 @@ import { Agent, AppBskyFeedPost, jsonToLex } from '@atproto/api';
 import type { Session } from '../auth/oauth';
 import {
   buildCaption,
+  clipCaption,
+  CROSSPOST_MAX_BYTES,
   buildPostRecord,
   CROSSPOST_MAX_GRAPHEMES,
   createCrosspost,
@@ -18,6 +20,7 @@ vi.mock('./image', () => ({ resizeImage: vi.fn() }));
 
 const DID = 'did:plc:abcdefghijklmnopqrstuvwx';
 const URL_ = `https://workbench.pub/u/${DID}/3kabcdefghij2`;
+const THUMB_BYTES = 1_000_000;
 const CID = 'bafkreihdwdcefgh4dqkjv67uzcmw7ojee6xedzdetojuzjevtenxquvyku';
 const blob = (size: number) => ({ $type: 'blob' as const, ref: { $link: CID }, mimeType: 'image/jpeg', size });
 
@@ -217,9 +220,65 @@ describe('createCrosspost over the real agent (HTTP shape)', () => {
     expect({ repo, collection, rkey }).toEqual({ repo: DID, collection: 'app.bsky.feed.post', rkey: undefined });
     expect(record).toMatchObject({ $type: 'app.bsky.feed.post', createdAt: '2026-11-08T12:00:00.000Z' });
     expect(record.embed.external.thumb).toEqual(blob(300_000));
-    expect(record.langs).toBeUndefined();
+    expect(record.langs).toEqual(['en']);
     expect(AppBskyFeedPost.validateRecord(jsonToLex(record)).success).toBe(true);
     const bytes = new TextEncoder().encode(record.text);
     expect(new TextDecoder().decode(bytes.slice(record.facets[0].index.byteStart, record.facets[0].index.byteEnd))).toBe(URL_);
+  });
+});
+
+describe('byte limit, langs and local validation', () => {
+  const bytes = (x: string) => new TextEncoder().encode(x).length;
+
+  it('limits the caption to Bluesky\'s 3000 byte text limit as well as 300 graphemes (multi-codepoint emoji)', () => {
+    const family = '👨‍👩‍👧‍👦'; // 1 grapheme, 25 bytes
+    const clipped = clipCaption(family.repeat(150), DID);
+    expect(graphemeLength(clipped)).toBeLessThan(150); // under 300 graphemes, but cut for bytes
+    const record = buildPostRecord({ caption: family.repeat(150), url: permalink(DID, '3kabcdefghij2'), title: 't', description: 'd', createdAt: '2026-11-08T12:00:00.000Z' });
+    expect(bytes(record.text)).toBeLessThanOrEqual(CROSSPOST_MAX_BYTES);
+    expect(graphemeLength(record.text)).toBeLessThanOrEqual(300);
+    expect(AppBskyFeedPost.validateRecord(jsonToLex(record)).success).toBe(true);
+    expect(clipCaption('short', DID)).toBe('short');
+  });
+
+  it('names a local validation failure InvalidPost with a plain message', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const f = fakeSession();
+    const e = await createCrosspost(f.session, { ...input, url: `https://workbench.pub/${'a'.repeat(4000)}` }).catch((x) => x);
+    expect(e).toMatchObject({ stage: 'crosspost', errorName: 'InvalidPost' });
+    expect(f.createRecord).not.toHaveBeenCalled();
+    expect(crosspostFailureNotice(e)).toContain('InvalidPost (crosspost). This caption is too long for Bluesky. Shorten it.');
+  });
+
+  it('posts without a thumb when even the re-resized image is over 1,000,000 bytes (no upload)', async () => {
+    vi.mocked(resizeImage).mockResolvedValue(new Blob([new Uint8Array(THUMB_BYTES + 1)], { type: 'image/jpeg' }));
+    const f = fakeSession();
+    await createCrosspost(f.session, { ...input, thumb: { ref: blob(1_200_000), original: new File(['x'], 'a.jpg') } });
+    expect(f.calls).toEqual(['createRecord:app.bsky.feed.post']);
+  });
+
+  it('adds langs from the browser language primary subtag, validated, and omits it when unusable', async () => {
+    const lang = vi.spyOn(navigator, 'language', 'get');
+    lang.mockReturnValue('en-US');
+    const f = fakeSession();
+    await createCrosspost(f.session, input);
+    const rec = f.createRecord.mock.calls[0][0].record as { langs?: string[] };
+    expect(rec.langs).toEqual(['en']);
+    expect(AppBskyFeedPost.validateRecord(jsonToLex(rec)).success).toBe(true);
+    lang.mockReturnValue('');
+    const g = fakeSession();
+    await createCrosspost(g.session, input);
+    expect((g.createRecord.mock.calls[0][0].record as { langs?: string[] }).langs).toBeUndefined();
+  });
+
+  it('maps a 401 to the generic expired-session hint and reserves the permission hint for scope errors', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const expired = await createCrosspost(fakeSession({ createFails: Object.assign(new Error('x'), { status: 401, error: 'InvalidToken' }) }).session, input).catch((x) => x);
+    expect(crosspostFailureNotice(expired)).toContain('Your session has expired. Sign in again.');
+    expect(crosspostFailureNotice(expired)).not.toContain('allow posting to Bluesky');
+    for (const err of [{ status: 403, error: 'Forbidden' }, { status: 400, error: 'InsufficientScope' }]) {
+      const e = await createCrosspost(fakeSession({ createFails: Object.assign(new Error('x'), err) }).session, input).catch((x) => x);
+      expect(crosspostFailureNotice(e)).toContain('Sign out and sign in again to allow posting to Bluesky.');
+    }
   });
 });

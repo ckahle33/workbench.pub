@@ -86,7 +86,8 @@ export function recoveryHint(i: FailureInfo): string {
   // Only creating can have produced a record; an unreadable upload or delete reply is safe to retry.
   if (i.maybeSaved && i.stage === 'create') return 'It may have been saved. Check before trying again, so you do not post it twice.';
   if (i.maybeSaved && i.stage === 'crosspost') return 'It may already be on Bluesky. Check before posting it yourself.';
-  if (i.stage === 'crosspost' && (SCOPE_NAMES.test(name) || SESSION_NAMES.test(name) || i.status === 403 || i.status === 401)) {
+  if (i.stage === 'crosspost' && i.errorName === 'InvalidPost') return 'This caption is too long for Bluesky. Shorten it.';
+  if (i.stage === 'crosspost' && (SCOPE_NAMES.test(name) || i.status === 403)) {
     return 'Sign out and sign in again to allow posting to Bluesky.';
   }
   if (i.status === 1 || name === 'NetworkError') return 'Check your internet connection and try again.';

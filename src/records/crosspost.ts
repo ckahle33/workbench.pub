@@ -1,11 +1,13 @@
 import { AppBskyFeedPost, jsonToLex } from '@atproto/api';
 import type { Session } from '../auth/oauth';
 import type { BlobRef } from '../../shared/lexicons';
-import { makeFailure } from './errors';
+import { logFailure, makeFailure, WriteError } from './errors';
 import { resizeImage } from './image';
 
 /** Bluesky's post text limit, in graphemes. The link is part of the text, so the caption gets what is left. */
 export const CROSSPOST_MAX_GRAPHEMES = 300;
+/** app.bsky.feed.post text is limited to 300 graphemes and 3000 bytes (UTF-8). */
+export const CROSSPOST_MAX_BYTES = 3000;
 export const SITE_URL = 'https://workbench.pub';
 /** app.bsky.embed.external thumbs are limited to 1,000,000 bytes. */
 export const THUMB_MAX_BYTES = 1_000_000;
@@ -32,13 +34,23 @@ export function clipGraphemes(s: string, max: number): string {
 
 /** Removes control and bidi-override characters (keeps newlines). */
 export function stripControls(s: string): string {
-  return s.replace(/[\u0000-\u0009\u000b-\u001f\u007f-\u009f‎‏‪-‮⁦-⁩]/g, '');
+  return s.replace(/[\u0000-\u0009\u000b-\u001f\u007f-\u009f\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, '');
 }
 
 export const permalink = (did: string, rkey: string): string => `${SITE_URL}/u/${did}/${rkey}`;
 
 /** Length of the permalink, using the 13-character TID record keys the PDS assigns. */
 export const linkLengthFor = (did: string): number => permalink(did, 'x'.repeat(TID_LENGTH)).length;
+
+const byteLength = (s: string): number => new TextEncoder().encode(s).length;
+
+/** Clips a caption to what fits next to the link: the grapheme budget AND the byte budget (emoji sequences are many bytes). */
+export function clipCaption(caption: string, did: string): string {
+  let out = clipGraphemes(caption, captionBudget(did));
+  const maxBytes = CROSSPOST_MAX_BYTES - linkLengthFor(did) - 1;
+  while (out && byteLength(out) > maxBytes) out = graphemes(out).slice(0, -1).join('');
+  return out;
+}
 
 /** Graphemes available to the caption once the newline and the link are counted. */
 export const captionBudget = (did: string): number => CROSSPOST_MAX_GRAPHEMES - linkLengthFor(did) - 1;
@@ -61,13 +73,16 @@ export interface PostInput {
   description: string;
   thumb?: BlobRef;
   createdAt: string;
+  /** BCP 47 primary language of the text, e.g. `en`. */
+  lang?: string;
 }
 
 /** The app.bsky.feed.post record: caption, newline, link; a link facet over the link's UTF-8 bytes; an external-card embed. */
 export function buildPostRecord(i: PostInput): AppBskyFeedPost.Record {
   const enc = new TextEncoder();
   const room = Math.max(0, CROSSPOST_MAX_GRAPHEMES - graphemeLength(i.url) - 1);
-  const caption = truncateGraphemes(stripControls(i.caption).trim(), room);
+  let caption = truncateGraphemes(stripControls(i.caption).trim(), room);
+  while (caption && byteLength(caption) + 1 + byteLength(i.url) > CROSSPOST_MAX_BYTES) caption = truncateGraphemes(caption, graphemeLength(caption) - 1).replace(/…$/, '');
   const lead = caption ? `${caption}\n` : '';
   const text = `${lead}${i.url}`;
   const byteStart = enc.encode(lead).length;
@@ -89,8 +104,16 @@ export function buildPostRecord(i: PostInput): AppBskyFeedPost.Record {
         ...(i.thumb ? { thumb: i.thumb as never } : {}),
       },
     },
+    ...(i.lang ? { langs: [i.lang] } : {}),
     createdAt: i.createdAt,
   };
+}
+
+/** `en` from `en-US`; undefined when the browser reports nothing usable. */
+function primaryLanguage(): string | undefined {
+  const tag = typeof navigator !== 'undefined' ? navigator.language : '';
+  const primary = tag.split('-')[0]?.toLowerCase() ?? '';
+  return /^[a-z]{2,3}$/.test(primary) ? primary : undefined;
 }
 
 export interface CrosspostInput {
@@ -115,17 +138,23 @@ export async function createCrosspost(s: Session, i: CrosspostInput, o?: { now?:
     else {
       try {
         const small = await resizeImage(i.thumb.original, THUMB_EDGE);
-        const res = await s.agent.com.atproto.repo.uploadBlob(new Uint8Array(await small.arrayBuffer()), { encoding: 'image/jpeg' });
-        const b = res.data.blob as unknown as { toJSON?: () => unknown };
-        thumb = (typeof b.toJSON === 'function' ? b.toJSON() : b) as BlobRef;
+        if (small.size <= THUMB_MAX_BYTES) {
+          const res = await s.agent.com.atproto.repo.uploadBlob(new Uint8Array(await small.arrayBuffer()), { encoding: 'image/jpeg' });
+          const b = res.data.blob as unknown as { toJSON?: () => unknown };
+          thumb = (typeof b.toJSON === 'function' ? b.toJSON() : b) as BlobRef;
+        } // else still too big: post without a thumb
       } catch {
         thumb = undefined; // the card is still useful without a picture
       }
     }
   }
-  const record = buildPostRecord({ ...i, thumb, createdAt: (o?.now?.() ?? new Date()).toISOString() });
+  const record = buildPostRecord({ ...i, thumb, lang: primaryLanguage(), createdAt: (o?.now?.() ?? new Date()).toISOString() });
   const valid = AppBskyFeedPost.validateRecord(jsonToLex(record)); // blobs must be in lexicon (BlobRef) form to validate
-  if (!valid.success) throw makeFailure('Could not post to Bluesky. The post was not valid.', 'crosspost');
+  if (!valid.success) {
+    const info = { stage: 'crosspost' as const, errorName: 'InvalidPost' };
+    logFailure(info);
+    throw new WriteError('This caption is too long for Bluesky. Shorten it.', info);
+  }
   try {
     const res = await s.agent.com.atproto.repo.createRecord({ repo: s.did, collection: 'app.bsky.feed.post', record: record as unknown as Record<string, unknown> });
     return { uri: res.data.uri };
