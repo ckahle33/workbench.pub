@@ -19,16 +19,13 @@
   max-width: var(--max);
   margin: 0 auto;
   padding: 18px var(--gutter);
-  display: grid;
-  grid-template-columns: auto 1fr auto;
-  grid-template-areas: 'mark nav actions';
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  column-gap: 40px;
-  row-gap: 8px;
+  gap: var(--s-1) 40px;
 }
 
 .wordmark {
-  grid-area: mark;
   font-weight: 800;
   font-size: 22px;
   letter-spacing: -0.03em;
@@ -43,11 +40,11 @@
 .wordmark:hover { color: var(--ink); }
 .wordmark .dot { color: var(--accent); }
 
-.site-nav .btn-text, .site-nav a, .header-actions { white-space: nowrap; }
-.site-nav a[dir] { white-space: normal; }
-.site-nav .btn-text { min-height: 44px; font-size: 15px; text-decoration-thickness: 1px; }
-.site-nav { grid-area: nav; display: flex; flex-wrap: wrap; align-items: center; gap: 0 28px; min-width: 0; }
-.site-nav a, .header-actions a:not(.btn) {
+.site-nav, .header-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0 28px; min-width: 0; }
+/* The signed-in user and Sign out (or Sign in) sit at the right edge. */
+.header-actions { margin-left: auto; gap: 0 24px; }
+
+.site-nav a:not(.btn), .header-actions a {
   display: inline-flex;
   align-items: center;
   min-height: 44px;
@@ -56,21 +53,27 @@
   text-decoration: none;
   text-underline-offset: 6px;
   text-decoration-thickness: 2px;
+  white-space: nowrap;
 }
-.site-nav a[aria-current='page'], .header-actions a[aria-current='page'] { text-decoration-line: underline; }
-.site-nav a:hover, .header-actions a:not(.btn):hover { text-decoration-line: underline; }
+.site-nav a[aria-current='page']:not(.btn), .header-actions a[aria-current='page'] { text-decoration-line: underline; }
+.site-nav a:not(.btn):hover, .header-actions a:hover { text-decoration-line: underline; }
+.site-nav .btn-primary { white-space: nowrap; }
+.site-nav .btn-primary[aria-current='page'] { background: var(--accent); border-color: var(--accent); }
 
-.header-actions { grid-area: actions; display: flex; align-items: center; gap: 20px; }
-.header-actions .btn-primary { white-space: nowrap; }
+/* Long handles shorten rather than push the header wider than the screen. */
+.header-actions a.header-user { display: inline-block; max-width: 28ch; overflow: hidden; text-overflow: ellipsis; line-height: 44px; }
+.header-actions .btn-text { min-height: 44px; font-size: 15px; white-space: nowrap; }
 
 @media (max-width: 720px) {
-  .site-header-inner {
-    grid-template-columns: 1fr auto;
-    grid-template-areas: 'mark actions' 'nav nav';
-    padding-block: 12px;
+  .site-header-inner { padding-block: 12px; column-gap: var(--s-3); }
+  .site-nav { gap: 0 var(--s-3); }
+  /* Signed in: the user row drops under the wordmark and nav, still right-aligned. */
+  .header-actions:has(.header-user) {
+    flex-basis: 100%;
+    justify-content: flex-end;
+    border-top: var(--rule-hair);
   }
-  .site-nav { border-top: var(--rule-hair); }
-  .header-actions { gap: 14px; }
+  .header-actions a.header-user { max-width: 60vw; }
 }
 
 .page {
