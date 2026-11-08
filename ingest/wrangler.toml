@@ -1,0 +1,13 @@
+# Cron Worker that drains Jetstream into D1.
+name = "workbench-ingest"
+main = "src/index.ts"
+compatibility_date = "2026-11-01"
+compatibility_flags = ["nodejs_compat"]
+
+[triggers]
+crons = ["* * * * *"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "workbench"
+database_id = "00000000-0000-0000-0000-000000000000" # same database as the root wrangler.toml
