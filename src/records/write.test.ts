@@ -1,7 +1,12 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Session } from '../auth/oauth';
 import { validateRecord } from '../../shared/lexicons';
 import { createProject, createReply, createTopic, createUpdate, deleteRecord, followSubject } from './write';
+
+beforeEach(() => {
+  vi.spyOn(console, 'error').mockImplementation(() => {});
+});
+afterEach(() => vi.restoreAllMocks());
 
 const NOW = () => new Date('2026-11-07T12:00:00.000Z');
 const PROJECT = 'at://did:plc:me/pub.workbench.project/abc';

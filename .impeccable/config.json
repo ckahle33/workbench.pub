@@ -1,0 +1,14 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "overused-font",
+        "value": "inter",
+        "createdAt": "2026-11-08T07:20:05.919Z",
+        "reason": "Owner's pinned Workprint brief: his ideas notes name Inter Tight as the free stand-in for Helvetica and his three boards use it; he asked for this look (decided by the owner via the brief; not a model default)"
+      }
+    ]
+  }
+}

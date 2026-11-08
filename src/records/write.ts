@@ -1,3 +1,4 @@
+import { describeThrown, logFailure, WriteError, type Stage } from './errors';
 import type { Session } from '../auth/oauth';
 import {
   LIMITS,
@@ -22,16 +23,26 @@ const createdAt = (o?: WriteOptions) => (o?.now?.() ?? new Date()).toISOString()
 /** Validates before any network call; the message is safe to show. */
 function checked<C extends Collection>(collection: C, record: unknown): RecordByCollection[C] {
   const r = validateRecord(collection, record);
-  if (!r.ok) throw new Error(`Invalid ${collection.split('.').pop()}: ${r.reason}`);
+  if (!r.ok) throw fail(`Invalid ${collection.split('.').pop()}: ${r.reason}`, 'validate');
   return r.value;
+}
+
+/** Builds a WriteError and logs it once. For thrown remote failures pass the cause. */
+function fail(message: string, stage: Stage, cause?: unknown): WriteError {
+  const info = { stage, ...(cause === undefined ? {} : describeThrown(cause)) };
+  logFailure(info);
+  return new WriteError(message, info);
 }
 
 async function put(s: Session, collection: Collection, record: object): Promise<string> {
   try {
     const res = await s.agent.com.atproto.repo.createRecord({ repo: s.did, collection, record: record as Record<string, unknown> });
     return res.data.uri;
-  } catch {
-    throw new Error('Could not save to your PDS. Please try again.');
+  } catch (e) {
+    // The server answered 2xx but the reply failed validation: the record exists, so use its uri.
+    const body = (e as { responseBody?: { uri?: unknown } } | null)?.responseBody;
+    if (describeThrown(e).maybeSaved && typeof body?.uri === 'string' && body.uri.startsWith('at://')) return body.uri;
+    throw fail('Could not save to your PDS. Please try again.', 'create', e);
   }
 }
 
@@ -41,8 +52,8 @@ async function upload(s: Session, file: File): Promise<BlobRef> {
     const res = await s.agent.com.atproto.repo.uploadBlob(bytes, { encoding: file.type || 'application/octet-stream' });
     const b = res.data.blob as unknown as { toJSON?: () => unknown };
     return (typeof b.toJSON === 'function' ? b.toJSON() : b) as BlobRef;
-  } catch {
-    throw new Error('Could not upload an image. Please try again.');
+  } catch (e) {
+    throw fail('Could not upload an image. Please try again.', 'upload', e);
   }
 }
 
@@ -52,7 +63,7 @@ export async function createTopic(
   o?: WriteOptions,
 ): Promise<{ uri: string; slug: string }> {
   const slug = normalizeSlug(i.name);
-  if (!slug) throw new Error('Topic name must contain 2 to 40 letters or numbers');
+  if (!slug) throw fail('Topic name must contain 2 to 40 letters or numbers', 'validate');
   const record = checked('pub.workbench.topic', {
     $type: 'pub.workbench.topic',
     name: i.name,
@@ -69,7 +80,7 @@ export async function createProject(
   o?: WriteOptions,
 ): Promise<{ uri: string }> {
   const topic = normalizeSlug(i.topic);
-  if (!topic) throw new Error('Topic must contain 2 to 40 letters or numbers');
+  if (!topic) throw fail('Topic must contain 2 to 40 letters or numbers', 'validate');
   const base = {
     $type: 'pub.workbench.project' as const,
     title: i.title,
@@ -96,8 +107,8 @@ export async function createUpdate(
   },
   o?: WriteOptions,
 ): Promise<{ uri: string; images: ImageDef[] }> {
-  if (i.images.length > LIMITS.images) throw new Error(`At most ${LIMITS.images} images per update`);
-  if (i.images.some((img) => img.alt.trim() === '')) throw new Error('Every image needs alt text');
+  if (i.images.length > LIMITS.images) throw fail(`At most ${LIMITS.images} images per update`, 'validate');
+  if (i.images.some((img) => img.alt.trim() === '')) throw fail('Every image needs alt text', 'validate');
 
   const links: LinkDef[] = i.links.map((l) => (l.title ? { url: l.url, title: l.title } : { url: l.url }));
   const parts: PartDef[] | undefined = i.parts?.map((p) => ({
@@ -144,9 +155,9 @@ export async function followSubject(
   key: string,
   o?: WriteOptions,
 ): Promise<{ uri: string }> {
-  if (kind === 'topic' && normalizeSlug(key) !== key) throw new Error('Topic must be a canonical slug');
+  if (kind === 'topic' && normalizeSlug(key) !== key) throw fail('Topic must be a canonical slug', 'validate');
   if (kind === 'project' && !/^at:\/\/[^/]+\/pub\.workbench\.project\/[^/]+$/.test(key)) {
-    throw new Error('Following a project needs the project record address');
+    throw fail('Following a project needs the project record address', 'validate');
   }
   const record = checked('pub.workbench.follow', {
     $type: 'pub.workbench.follow',
@@ -159,13 +170,13 @@ export async function followSubject(
 
 export async function deleteRecord(s: Session, uri: string): Promise<void> {
   const m = /^at:\/\/([^/]+)\/([^/]+)\/([^/]+)$/.exec(uri);
-  if (!m) throw new Error('Invalid record address');
+  if (!m) throw fail('Invalid record address', 'validate');
   const [, repo, collection, rkey] = m;
-  if (repo !== s.did) throw new Error('You can only delete your own records');
-  if (!collection.startsWith('pub.workbench.')) throw new Error('Cannot delete this kind of record');
+  if (repo !== s.did) throw fail('You can only delete your own records', 'validate');
+  if (!collection.startsWith('pub.workbench.')) throw fail('Cannot delete this kind of record', 'validate');
   try {
     await s.agent.com.atproto.repo.deleteRecord({ repo, collection, rkey });
-  } catch {
-    throw new Error('Could not delete the record. Please try again.');
+  } catch (e) {
+    throw fail('Could not delete the record. Please try again.', 'create', e);
   }
 }
