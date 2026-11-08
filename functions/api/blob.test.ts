@@ -216,6 +216,16 @@ describe('DEV_PLACEHOLDERS (local demo seed only)', () => {
     expect(real.headers.get('content-type')).toBe('image/png');
   });
 
+  it('only accepts DIDs real PLC identifiers cannot have (a digit 0 or 1 after the letters)', async () => {
+    const s = happy();
+    for (const did of ['did:plc:demoabcdefghijklmnopq', 'did:plc:demo', 'did:plc:demojun0001x', 'did:plc:demo0001']) {
+      const r = await req(s, `/api/blob/${did}/ph-43-a`, { DEV_PLACEHOLDERS: '1' });
+      expect(r.headers.get('content-type') ?? '').not.toMatch(/svg/);
+    }
+    const ok = await req(s, `/api/blob/${DEMO}/ph-43-a`, { DEV_PLACEHOLDERS: '1' });
+    expect(ok.headers.get('content-type')).toBe('image/svg+xml');
+  });
+
   it('serves a stable SVG with sandboxing headers and the aspect ratio from the CID', async () => {
     const s = happy();
     const r = await req(s, `/api/blob/${DEMO}/ph-34-d`, { DEV_PLACEHOLDERS: '1' });

@@ -4,12 +4,12 @@
 -- update fuzz-05 has a deliberately unloadable image to exercise the failed-image fallback.
 -- Profiles are pinned (fetched_at far in the future) so the Worker never looks these DIDs up.
 
-DELETE FROM replies WHERE did LIKE 'did:plc:demo%';
-DELETE FROM updates WHERE did LIKE 'did:plc:demo%';
-DELETE FROM projects WHERE did LIKE 'did:plc:demo%';
-DELETE FROM follows WHERE did LIKE 'did:plc:demo%';
-DELETE FROM topics WHERE did LIKE 'did:plc:demo%';
-DELETE FROM profiles WHERE did LIKE 'did:plc:demo%';
+DELETE FROM replies WHERE did GLOB 'did:plc:demo[a-z]*0[0-9][0-9][0-9]';
+DELETE FROM updates WHERE did GLOB 'did:plc:demo[a-z]*0[0-9][0-9][0-9]';
+DELETE FROM projects WHERE did GLOB 'did:plc:demo[a-z]*0[0-9][0-9][0-9]';
+DELETE FROM follows WHERE did GLOB 'did:plc:demo[a-z]*0[0-9][0-9][0-9]';
+DELETE FROM topics WHERE did GLOB 'did:plc:demo[a-z]*0[0-9][0-9][0-9]';
+DELETE FROM profiles WHERE did GLOB 'did:plc:demo[a-z]*0[0-9][0-9][0-9]';
 
 INSERT OR IGNORE INTO topics (uri, did, rkey, slug, name, description, created_at, indexed_at, hidden) VALUES ('at://did:plc:demotopics0001/pub.workbench.topic/electronics', 'did:plc:demotopics0001', 'electronics', 'electronics', 'Electronics', 'Circuits, pedals, synths, power supplies and the things you solder.', '2025-11-01T00:00:00.000Z', 1761955200000, 0);
 INSERT OR IGNORE INTO topics (uri, did, rkey, slug, name, description, created_at, indexed_at, hidden) VALUES ('at://did:plc:demotopics0001/pub.workbench.topic/music-production', 'did:plc:demotopics0001', 'music-production', 'music-production', 'Music production', 'Recording, arranging, mixing and mastering, from voice memo to release.', '2025-11-01T00:00:00.000Z', 1761955200001, 0);

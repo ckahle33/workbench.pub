@@ -2,13 +2,17 @@
  * DEV ONLY. Generated placeholder images for the local demo seed (scripts/dev-seed.sql).
  *
  * Reached only when the Worker env has DEV_PLACEHOLDERS === '1' (set in the gitignored .dev.vars,
- * never in wrangler.toml) AND the DID starts with `did:plc:demo` AND the CID looks like
+ * never in wrangler.toml) AND the DID matches DEMO_DID (`did:plc:demo<letters>0NNN`) AND the CID looks like
  * `ph-<ratio>-<seed>`. Production never sets the var, so this branch cannot serve anything there.
  * SVG is deliberately not in the blob proxy's image allowlist; this is the only SVG we ever serve,
  * we generate it ourselves, and it carries a sandboxing CSP.
  */
 
-export const DEMO_DID_PREFIX = 'did:plc:demo';
+/**
+ * Seed DIDs: `did:plc:demo<letters>0<3 digits>`. Real PLC DIDs are base32 ([a-z2-7]), which has no 0 or 1,
+ * so no real account can match. scripts/dev-seed.sql deletes with the equivalent GLOB.
+ */
+export const DEMO_DID = /^did:plc:demo[a-z]+0\d{3}$/;
 const PLACEHOLDER_CID = /^ph-(43|32|11|34)-[a-z0-9]{1,16}$/;
 
 const RATIOS: Record<string, { w: number; h: number; label: string }> = {
@@ -27,7 +31,7 @@ const LIGHT = '#c7c7c7';
 const ACCENT = '#d0201a';
 
 export function placeholderEnabled(env: { DEV_PLACEHOLDERS?: string }, did: string, cid: string): boolean {
-  return env.DEV_PLACEHOLDERS === '1' && did.startsWith(DEMO_DID_PREFIX) && PLACEHOLDER_CID.test(cid);
+  return env.DEV_PLACEHOLDERS === '1' && DEMO_DID.test(did) && PLACEHOLDER_CID.test(cid);
 }
 
 /** Small deterministic PRNG (mulberry32) seeded from the CID, so each placeholder is stable. */
