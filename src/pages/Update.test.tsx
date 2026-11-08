@@ -145,4 +145,17 @@ describe('Update page reply box', () => {
     await waitFor(() => expect(deleteRecord).toHaveBeenCalledWith(sess.session, u1.uri));
     expect(optimistic.isRemoved(u1.uri)).toBe(true);
   });
+
+  it('renders a just-posted update from the optimistic store while the server still says 404', async () => {
+    mockApi(() => undefined);
+    optimistic.add({
+      kind: 'update', uri: u1.uri, did: ALICE, projectUri: project(1).uri, heading: 'Just posted', body: 'fresh',
+      createdAt: '2026-11-07T00:00:00Z',
+    });
+    renderPage();
+    expect(await screen.findByRole('heading', { level: 1, name: 'Just posted' })).toBeInTheDocument();
+    expect(screen.getByText('fresh')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /project/i })).toHaveAttribute('href', `/p/${ALICE}/p1`);
+    expect(screen.queryByText('Update not found.')).toBeNull();
+  });
 });

@@ -9,7 +9,7 @@ import { Replies } from '../components/Replies';
 import { LoadMore, Status } from '../components/Status';
 import { TimelineEntry } from '../components/Timeline';
 import { usePaged, useTitle } from '../hooks';
-import { asReply, optimistic, useOptimistic } from '../optimistic';
+import { asReply, asUpdate, optimistic, useOptimistic } from '../optimistic';
 
 interface UpdateResponse extends Page<ReplyView> {
   update: FeedItem;
@@ -28,11 +28,27 @@ export function Update() {
     const thread = new Set([rootUri, ...loaded.map((r) => r.uri)]);
     optimistic.prune(loaded, (r) => r.kind === 'reply' && thread.has(r.parentUri));
   }, [loaded, mine, rootUri]);
-  useTitle(list.first?.update.heading ?? '');
+  const selfUri = `at://${did}/pub.workbench.update/${rkey}`;
+  useTitle(list.first?.update.heading ?? mine.find((i) => i.uri === selfUri)?.heading ?? '');
 
   if (list.phase === 'loading') return <Status kind="loading" />;
   if (list.phase === 'error' || (list.phase === 'ready' && !list.first)) return <Status kind="error" />;
-  if (list.phase === 'notfound' || !list.first) return <Status kind="notfound">Update not found.</Status>;
+  if (list.phase === 'notfound' || !list.first) {
+    // Just posted and not indexed yet: show what we have from the optimistic store.
+    const pending = mine.find((i) => i.uri === selfUri && i.kind === 'update');
+    if (!pending) return <Status kind="notfound">Update not found.</Status>;
+    const u = asUpdate(pending);
+    const [, , pDid, , pRkey] = u.projectUri.split('/');
+    return (
+      <>
+        <p className="meta">
+          In <Link to={`/p/${pDid}/${pRkey}`}>the project</Link>
+        </p>
+        <TimelineEntry update={u} headingLevel={1} />
+        <p className="meta">Replies will appear once this update is indexed.</p>
+      </>
+    );
+  }
 
   const { update, author } = list.first;
   // Replies anywhere beneath this update belong in the thread.
