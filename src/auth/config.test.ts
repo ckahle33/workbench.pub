@@ -29,6 +29,8 @@ describe('OAUTH_SCOPE', () => {
     for (const c of ['topic', 'project', 'update', 'reply', 'follow']) {
       expect(parts).toContain(`repo:pub.workbench.${c}`);
     }
+    expect(parts).toContain('repo:app.bsky.feed.post?action=create');
+    expect(parts.filter((p) => p.startsWith('repo:app.bsky'))).toEqual(['repo:app.bsky.feed.post?action=create']);
     expect(OAUTH_SCOPE).not.toContain('pub.workbench.*');
     expect(OAUTH_SCOPE).not.toContain('transition:');
   });

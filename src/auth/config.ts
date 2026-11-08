@@ -10,6 +10,9 @@ export const OAUTH_SCOPE = [
   'repo:pub.workbench.update',
   'repo:pub.workbench.reply',
   'repo:pub.workbench.follow',
+  // Optional cross-post of an update to the user's Bluesky feed. Syntax from https://atproto.com/specs/permission
+  // (repo:<collection>?action=create): create only, no update or delete of their Bluesky posts.
+  'repo:app.bsky.feed.post?action=create',
   'blob:image/*',
 ].join(' ');
 

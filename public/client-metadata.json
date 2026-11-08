@@ -3,7 +3,7 @@
   "client_name": "workbench.pub",
   "client_uri": "https://workbench.pub",
   "redirect_uris": ["https://workbench.pub/"],
-  "scope": "atproto repo:pub.workbench.topic repo:pub.workbench.project repo:pub.workbench.update repo:pub.workbench.reply repo:pub.workbench.follow blob:image/*",
+  "scope": "atproto repo:pub.workbench.topic repo:pub.workbench.project repo:pub.workbench.update repo:pub.workbench.reply repo:pub.workbench.follow repo:app.bsky.feed.post?action=create blob:image/*",
   "response_types": ["code"],
   "grant_types": ["authorization_code", "refresh_token"],
   "token_endpoint_auth_method": "none",

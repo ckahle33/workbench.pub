@@ -1,4 +1,4 @@
-import { describeThrown, logFailure, WriteError, type Stage } from './errors';
+import { describeThrown, makeFailure } from './errors';
 import type { Session } from '../auth/oauth';
 import {
   LIMITS,
@@ -27,13 +27,7 @@ function checked<C extends Collection>(collection: C, record: unknown): RecordBy
   return r.value;
 }
 
-/** Builds a WriteError and logs it once. For thrown remote failures pass the cause. */
-function fail(message: string, stage: Stage, cause?: unknown): WriteError {
-  const described = cause === undefined ? {} : describeThrown(cause);
-  const info = { stage, ...described, maybeSaved: stage === 'create' ? described.maybeSaved : undefined };
-  logFailure(info);
-  return new WriteError(message, info);
-}
+const fail = makeFailure;
 
 /** A uri recovered from an unreadable reply is trusted only if it names our own repo and this collection. */
 function isOwnRecord(uri: string, did: string, collection: string): boolean {
