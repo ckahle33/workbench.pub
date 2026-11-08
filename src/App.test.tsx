@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { App } from './App';
 import { restoreSession } from './auth/oauth';
@@ -26,7 +26,7 @@ describe('App', () => {
     renderApp();
     expect(screen.getByRole('banner')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /workbench/i })).toHaveAttribute('href', '/');
-    expect(await screen.findByRole('link', { name: /sign in/i })).toHaveAttribute('href', '/signin');
+    expect(await within(screen.getByRole('banner')).findByRole('link', { name: /sign in/i })).toHaveAttribute('href', '/signin');
     expect(screen.getByRole('main')).toBeInTheDocument();
   });
 
