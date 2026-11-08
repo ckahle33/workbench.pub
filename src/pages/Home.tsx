@@ -1,12 +1,14 @@
+import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import type { FeedItem } from '../api';
 import { useSession } from '../auth/SessionContext';
-import { DateText } from '../components/Timeline';
+import { FeedCard } from '../components/FeedCard';
 import { LoadMore, Status } from '../components/Status';
+import { TopicFilter } from '../components/TopicFilter';
 import { usePaged, useTitle } from '../hooks';
 import { optimistic, useOptimistic } from '../optimistic';
 
-function Feed({ path, empty }: { path: string; empty: string }) {
+function Feed({ path, empty, emptyAction }: { path: string; empty: string; emptyAction?: ReactNode }) {
   const feed = usePaged<FeedItem>(path);
   useOptimistic();
   if (feed.phase === 'loading') return <Status kind="loading" />;
@@ -16,19 +18,13 @@ function Feed({ path, empty }: { path: string; empty: string }) {
   return (
     <>
       {items.length === 0 ? (
-        <Status kind="empty">{empty}</Status>
+        <Status kind="empty" action={emptyAction}>
+          {empty}
+        </Status>
       ) : (
         <ul className="cards">
           {items.map((u) => (
-            <li key={u.uri}>
-              <p className="meta">
-                <Link to={`/p/${u.project.did}/${u.project.rkey}`} dir="auto">{u.project.title}</Link> · <DateText iso={u.createdAt} />
-              </p>
-              <h3 dir="auto">
-                <Link to={`/u/${u.did}/${u.rkey}`}>{u.heading}</Link>
-              </h3>
-              <p className="excerpt" dir="auto">{u.body}</p>
-            </li>
+            <FeedCard key={u.uri} item={u} />
           ))}
         </ul>
       )}
@@ -37,22 +33,64 @@ function Feed({ path, empty }: { path: string; empty: string }) {
   );
 }
 
+type View = 'following' | 'everyone';
+
 export function Home() {
   useTitle('');
   const { session, loading } = useSession();
+  const [chosen, setChosen] = useState<View | null>(null);
+  // Signed in: what you follow first; anyone else sees everything.
+  const view: View = session ? (chosen ?? 'following') : 'everyone';
   return (
-    <>
-      <h1>Recent from the workbench</h1>
-      {!loading && session && (
-        <section aria-labelledby="following-h">
-          <h2 id="following-h">Following</h2>
-          <Feed path={`/api/feed?following=${encodeURIComponent(session.did)}`} empty="Nothing from what you follow yet. Follow a project or topic to see it here." />
+    <div className="with-filter">
+      <div className="filter-col">
+        <TopicFilter />
+      </div>
+      <div className="main-col">
+        <div className="feed-head">
+          <h1>Latest</h1>
+          {!loading && session && (
+            <div className="segmented" role="group" aria-label="Show updates from">
+              <button type="button" aria-pressed={view === 'following'} onClick={() => setChosen('following')}>
+                Following
+              </button>
+              <button type="button" aria-pressed={view === 'everyone'} onClick={() => setChosen('everyone')}>
+                Everyone
+              </button>
+            </div>
+          )}
+        </div>
+        <section aria-labelledby="feed-h" className="feed">
+          <h2 id="feed-h" className="visually-hidden">
+            {view === 'following' ? 'Following' : 'Everyone'}
+          </h2>
+          {view === 'following' && session ? (
+            <Feed
+              key="following"
+              path={`/api/feed?following=${encodeURIComponent(session.did)}`}
+              empty="Nothing from what you follow yet. Follow a project or topic to see it here."
+              emptyAction={
+                <button type="button" onClick={() => setChosen('everyone')}>
+                  See everyone
+                </button>
+              }
+            />
+          ) : (
+            <Feed
+              key="everyone"
+              path="/api/feed"
+              empty="Nothing here yet."
+              emptyAction={
+                session ? (
+                  <Link to="/new" className="btn btn-primary">
+                    Start a project
+                  </Link>
+                ) : undefined
+              }
+            />
+          )}
         </section>
-      )}
-      <section aria-labelledby="latest-h">
-        <h2 id="latest-h">Latest updates</h2>
-        <Feed path="/api/feed" empty="Nothing here yet." />
-      </section>
-    </>
+      </div>
+    </div>
   );
 }

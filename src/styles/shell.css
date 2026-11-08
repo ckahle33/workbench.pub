@@ -76,22 +76,22 @@
 .page {
   max-width: var(--max);
   margin: 0 auto;
-  padding: 56px var(--gutter) 96px;
+  padding: var(--s-6) var(--gutter) var(--s-7);
 }
 @media (max-width: 480px) {
-  .page { padding-top: 32px; padding-bottom: 64px; }
+  .page { padding-top: var(--s-4); padding-bottom: var(--s-6); }
 }
 
 /* Main column plus aside, wrapping to one column (aside under main) on narrow screens. */
-.with-aside { display: flex; flex-wrap: wrap; gap: 48px; }
+.with-aside { display: flex; flex-wrap: wrap; gap: var(--s-5); }
 .with-aside > .main-col { flex: 999 1 560px; min-width: 0; }
-.with-aside > .side-col { flex: 1 1 300px; min-width: 0; display: flex; flex-direction: column; gap: 32px; }
+.with-aside > .side-col { flex: 1 1 300px; min-width: 0; display: flex; flex-direction: column; gap: var(--s-5); }
 
 /* Filter aside first, main column second (feed, topic). */
-.with-filter { display: flex; flex-wrap: wrap; gap: 48px; }
+.with-filter { display: flex; flex-wrap: wrap; gap: var(--s-5); }
 .with-filter > .filter-col { flex: 1 1 200px; min-width: 0; }
 .with-filter > .main-col { flex: 999 1 640px; min-width: 0; }
 
 /* A ruled block in an aside: 2px rule, mono label, content. */
 .side-block { border-top: var(--rule); padding-top: 14px; }
-.side-block > .label { display: block; margin-bottom: 10px; }
+.side-block > .label { display: block; margin-bottom: var(--s-2); }

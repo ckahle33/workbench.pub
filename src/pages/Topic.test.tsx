@@ -33,7 +33,7 @@ describe('Topic', () => {
     expect(screen.getByRole('link', { name: 'Project 1' })).toHaveAttribute('href', expect.stringMatching(/^\/p\/did:plc:.*\/p1$/));
     fireEvent.click(screen.getByRole('button', { name: /load more/i }));
     expect(await screen.findByRole('link', { name: 'Last one' })).toBeInTheDocument();
-    expect(fx.calls[1].searchParams.get('cursor')).toBe('20:at://x/y/z');
+    expect(fx.calls.filter((u) => u.pathname === '/api/topics/synths')[1].searchParams.get('cursor')).toBe('20:at://x/y/z');
     expect(screen.queryByRole('button', { name: /load more/i })).toBeNull();
   });
 
