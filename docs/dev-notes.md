@@ -41,6 +41,17 @@ these params are therefore documented (legacy repo) and worked in a live `wrangl
 Moving to v2 needs a URL and param change plus reading the v2 event shape (v2 events carry a `cursor` field; whether they also carry `time_us`
 is not stated), so it is a code task, not a config one.
 
+## Cross-posting
+
+New update form only, opt-in ("Also post this to Bluesky", unchecked by default, remembered per account in localStorage as `wb.crosspost:<did>`).
+Code: `src/records/crosspost.ts` (caption, record, `createCrosspost`), `src/components/CrosspostBox.tsx`, wiring in `src/pages/NewUpdate.tsx`.
+
+- Order: the workbench update is created first; only after it succeeds is the Bluesky post created, as a separate `createRecord` of `app.bsky.feed.post`. A failed Bluesky post never rolls back the update, is never retried, and shows a notice ("Your update is posted. The Bluesky post did not go through: <code> (crosspost)...") with a `[crosspost]` console line (stage, status, error name only). Error stage is `crosspost` (`src/records/errors.ts`).
+- Post: text is `caption`, a newline, then the permalink `https://workbench.pub/u/<did>/<rkey>`; a link facet covers the URL using UTF-8 byte offsets (`TextEncoder`); embed is `app.bsky.embed.external` (title `Project: Heading`, description first 200 characters of the notes). The caption budget is 300 graphemes (`Intl.Segmenter`) minus the link and the newline, assuming a 13 character record key.
+- Thumb: the first photo's blob from the update step is reused when its size is at most 1,000,000 bytes (the lexicon limit for external thumbs). Otherwise the original file is re-resized to 1000px (`resizeImage`, JPEG) and uploaded as a separate blob; if that fails the post goes out without a thumb. The photos are never posted as an image set.
+- Scope: `repo:app.bsky.feed.post?action=create` (syntax from https://atproto.com/specs/permission, `repo:<collection>?action=...`). Sessions created before the scope existed get a scope error from the PDS; the message tells the person to sign out and in. Not verified against a live server: whether Bluesky's own authorization server grants this scope to third-party clients.
+- Not cross-posted: replies, topics, follows, projects.
+
 ## Sign-in (AT Protocol OAuth)
 
 Public browser client (`@atproto/oauth-client-browser` 0.5.x, `BrowserOAuthClient`), no backend session and no secrets.
@@ -50,7 +61,7 @@ There is no separate callback route: the redirect URI is the site root (`https:/
 `restoreSession()` runs on every app load and completes the login if the URL carries callback parameters.
 
 **Scope used (verified 2026-11-07 against https://atproto.com/specs/permission and /specs/oauth):**
-`atproto repo:pub.workbench.topic repo:pub.workbench.project repo:pub.workbench.update repo:pub.workbench.reply repo:pub.workbench.follow blob:image/*`.
+`atproto repo:pub.workbench.topic repo:pub.workbench.project repo:pub.workbench.update repo:pub.workbench.reply repo:pub.workbench.follow repo:app.bsky.feed.post?action=create blob:image/*`.
 Granular `repo:` and `blob:` scopes are defined in the current permission spec, so `transition:generic` is not
 requested. The spec does not allow partial wildcards (`repo:pub.workbench.*` is invalid), so each collection is
 listed explicitly; adding a collection means updating `src/auth/config.ts` and `public/client-metadata.json`

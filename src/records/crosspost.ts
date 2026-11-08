@@ -24,6 +24,12 @@ export function truncateGraphemes(s: string, max: number): string {
   return g.slice(0, Math.max(0, max - 1)).join('').trimEnd() + '…';
 }
 
+/** Hard cut to `max` graphemes with no ellipsis (for limiting what can be typed). */
+export function clipGraphemes(s: string, max: number): string {
+  const g = graphemes(s);
+  return g.length <= max ? s : g.slice(0, max).join('');
+}
+
 /** Removes control and bidi-override characters (keeps newlines). */
 export function stripControls(s: string): string {
   return s.replace(/[\u0000-\u0009\u000b-\u001f\u007f-\u009f‎‏‪-‮⁦-⁩]/g, '');

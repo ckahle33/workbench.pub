@@ -218,3 +218,8 @@ form button[type='submit'][aria-disabled='true'], form button[type='submit']:dis
 .report-form textarea { min-height: 96px; }
 .report-form button[type='submit'] { margin-top: var(--s-2); }
 .signin-help { margin-top: var(--s-1); }
+
+/* Opt-in cross-post */
+.crosspost .check { display: flex; align-items: center; gap: var(--s-1); min-height: 44px; cursor: pointer; font-weight: 500; }
+.crosspost input[type='checkbox'] { width: 24px; height: 24px; min-height: 0; margin: 0; accent-color: var(--ink); flex: none; }
+.crosspost textarea { margin-top: 6px; }

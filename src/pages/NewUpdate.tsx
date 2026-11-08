@@ -1,4 +1,4 @@
-import { useRef, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { flushSync } from 'react-dom';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
@@ -18,14 +18,26 @@ import {
   type PartRow,
   type PickedImage,
 } from '../components/Composer';
+import { CrosspostBox } from '../components/CrosspostBox';
 import { Status } from '../components/Status';
+import { api } from '../api';
 import { useSession } from '../auth/SessionContext';
 import { useTitle } from '../hooks';
 import { optimistic } from '../optimistic';
 import { ImageTooLargeError, resizeImage } from '../records/image';
 import { plainImages } from '../records/blobs';
+import { buildCaption, captionBudget, createCrosspost, permalink } from '../records/crosspost';
+import { crosspostFailureNotice } from '../records/errors';
 import { createUpdate } from '../records/write';
 import { LIMITS } from '../../shared/lexicons';
+
+function readFlag(key: string): boolean {
+  try {
+    return !!key && window.localStorage.getItem(key) === '1';
+  } catch {
+    return false;
+  }
+}
 
 /** A photo could not be prepared; its message is ours and safe to show. */
 class PhotoError extends Error {}
@@ -48,6 +60,44 @@ export function NewUpdate() {
   const [busy, setBusy] = useState(false);
   const [postedHref, setPostedHref] = useState<string | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
+  // Cross-post: opt-in, remembered per account; null means "not chosen on this page yet".
+  const [crosspostChoice, setCrosspostChoice] = useState<boolean | null>(null);
+  const [captionEdit, setCaptionEdit] = useState<string | null>(null);
+  const [captionError, setCaptionError] = useState<string | undefined>();
+  const [projectTitle, setProjectTitle] = useState('');
+  const [crosspostState, setCrosspostState] = useState<'idle' | 'posting' | 'done'>('idle');
+  const [crosspostNotice, setCrosspostNotice] = useState<string | null>(null);
+  const storageKey = session ? `wb.crosspost:${session.did}` : '';
+  const crosspost = crosspostChoice ?? readFlag(storageKey);
+  const budget = captionBudget(did);
+  const caption = captionEdit ?? buildCaption({ heading, body, projectTitle }, budget);
+
+  function chooseCrosspost(v: boolean) {
+    setCrosspostChoice(v);
+    try {
+      window.localStorage.setItem(storageKey, v ? '1' : '0');
+    } catch {
+      /* the choice just is not remembered */
+    }
+  }
+
+  useEffect(() => {
+    if (!crosspost || projectTitle || !did) return;
+    const projectUri = `at://${did}/pub.workbench.project/${rkey}`;
+    const known = optimistic.find(projectUri)?.title;
+    if (known) {
+      setProjectTitle(known);
+      return;
+    }
+    let cancelled = false;
+    api
+      .get<{ project?: { title?: string } }>(`/api/projects/${encodeURIComponent(did)}/${encodeURIComponent(rkey)}?limit=1`)
+      .then((r) => !cancelled && typeof r.project?.title === 'string' && setProjectTitle(r.project.title))
+      .catch(() => {}); // the caption simply has no project title
+    return () => {
+      cancelled = true;
+    };
+  }, [crosspost, projectTitle, did, rkey]);
 
   if (loading) return <Status kind="loading" />;
   if (!session) return <SignInPrompt what="add an update" />;
@@ -75,7 +125,9 @@ export function NewUpdate() {
       body: body.trim() ? undefined : 'Write a few notes.',
     };
     const altMissing = images.some((i) => i.alt.trim() === '');
-    const invalid = !!(next.heading || next.body || altMissing || Object.keys(l.errors).length || Object.keys(p.errors).length);
+    const captionProblem = crosspost && !caption.trim() ? 'Add a caption for the Bluesky post, or untick it.' : undefined;
+    setCaptionError(captionProblem);
+    const invalid = !!(next.heading || next.body || altMissing || captionProblem || Object.keys(l.errors).length || Object.keys(p.errors).length);
     setSubmitError(null);
     flushSync(() => {
       setErrors(next);
@@ -137,6 +189,25 @@ export function NewUpdate() {
         }),
       );
       afterWrite(() => setPostedHref(href));
+      if (crosspost) {
+        // A separate step after the update is saved. A failure never undoes the update and is never retried.
+        afterWrite(() => setCrosspostState('posting'));
+        try {
+          const first = plainImages(result.images)[0];
+          await createCrosspost(session, {
+            caption,
+            url: permalink(session.did, result.uri.split('/').pop() ?? ''),
+            title: projectTitle ? `${projectTitle}: ${heading.trim()}` : heading.trim(),
+            description: body.trim(),
+            thumb: first && images[0] ? { ref: first.image, original: images[0].file } : undefined,
+          });
+          afterWrite(() => setCrosspostState('done'));
+        } catch (err) {
+          afterWrite(() => setCrosspostNotice(crosspostFailureNotice(err)));
+          afterWrite(() => setCrosspostState('idle'));
+          return; // stay on this page so the notice can be read
+        }
+      }
       afterWrite(() => navigate(href));
     } catch (err) {
       setSubmitError(err instanceof PhotoError ? err.message : writeErrorMessage(err, 'post your update'));
@@ -149,6 +220,8 @@ export function NewUpdate() {
       <section className="form-page">
         <h1>Add update</h1>
         <p role="status">{POSTED_TEXT}</p>
+        {crosspostState === 'posting' && <p role="status">Posting to Bluesky…</p>}
+        {crosspostNotice && <p role="status">{crosspostNotice}</p>}
         <p>
           <Link to={postedHref}>Back to the project</Link>
         </p>
@@ -167,6 +240,7 @@ export function NewUpdate() {
       <ImagePicker images={images} onChange={setImages} showErrors={showAltErrors} />
       <LinkList rows={links} onChange={setLinks} errors={linkErrors} />
       <PartsList rows={parts} onChange={setParts} errors={partErrors} />
+      <CrosspostBox did={did} checked={crosspost} onChecked={chooseCrosspost} caption={caption} onCaption={setCaptionEdit} budget={budget} error={captionError} />
       <div className="form-submit">
         <FieldError id="submit-error">{submitError}</FieldError>
         <button type="submit" aria-disabled={busy || undefined}>
