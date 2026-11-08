@@ -86,6 +86,19 @@ describe('NewProject', () => {
     expect(vi.mocked(createProject).mock.calls[0][1].topic).toBe('wood-working');
   });
 
+  it('Enter in the new topic name creates the topic instead of submitting the project form', async () => {
+    vi.mocked(createTopic).mockResolvedValue({ uri: `at://${ALICE}/pub.workbench.topic/x`, slug: 'lathes' });
+    renderPage();
+    await screen.findByRole('option', { name: /Synthesizers/ });
+    fireEvent.change(screen.getByLabelText(/^topic/i), { target: { value: '__new__' } });
+    fill(/new topic name/i, 'Lathes');
+    // fireEvent returns false when the handler called preventDefault (the browser would otherwise submit the form).
+    expect(fireEvent.keyDown(screen.getByLabelText(/new topic name/i), { key: 'Enter' })).toBe(false);
+    await waitFor(() => expect(createTopic).toHaveBeenCalledWith(h.session, { name: 'Lathes', description: '' }));
+    await waitFor(() => expect(screen.getByLabelText(/^topic/i)).toHaveValue('lathes'));
+    expect(createProject).not.toHaveBeenCalled();
+  });
+
   it('selects an existing topic instead of creating a duplicate', async () => {
     renderPage();
     await screen.findByRole('option', { name: /Synthesizers/ });

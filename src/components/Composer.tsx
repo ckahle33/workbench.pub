@@ -48,10 +48,12 @@ interface TextFieldProps {
   error?: string;
   hint?: string;
   required?: boolean;
+  /** Single-line only: Enter calls this instead of submitting the surrounding form. */
+  onEnter?: () => void;
 }
 
 /** Labelled text input or textarea with a hard length limit and a remaining-characters count. */
-export function TextField({ label, value, onChange, max, multiline, error, hint, required }: TextFieldProps) {
+export function TextField({ label, value, onChange, max, multiline, error, hint, required, onEnter }: TextFieldProps) {
   const id = useId();
   const describedBy = [error ? `${id}-err` : '', hint ? `${id}-hint` : '', `${id}-count`].filter(Boolean).join(' ');
   const common = {
@@ -74,7 +76,20 @@ export function TextField({ label, value, onChange, max, multiline, error, hint,
       {multiline ? (
         <textarea {...common} rows={6} onChange={(e) => onChange(e.target.value)} />
       ) : (
-        <input {...common} type="text" onChange={(e) => onChange(e.target.value)} />
+        <input
+          {...common}
+          type="text"
+          onChange={(e) => onChange(e.target.value)}
+          onKeyDown={
+            onEnter &&
+            ((e) => {
+              if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+                e.preventDefault();
+                onEnter();
+              }
+            })
+          }
+        />
       )}
       <p id={`${id}-count`} className="meta">
         {max - value.length} characters left
@@ -362,7 +377,14 @@ export function TopicSelector({ value, onChange, error }: { value: string | null
       <FieldError id={`${id}-err`}>{error}</FieldError>
       {creating && (
         <div className="subform">
-          <TextField label="New topic name" value={name} onChange={setName} max={LIMITS.title} error={createError ?? undefined} />
+          <TextField
+            label="New topic name"
+            value={name}
+            onChange={setName}
+            max={LIMITS.title}
+            error={createError ?? undefined}
+            onEnter={() => void create()}
+          />
           <p className="meta">{previewSlug ? <>Slug that will be used: #{previewSlug}</> : 'Slug that will be used: (enter 2 to 40 letters or numbers)'}</p>
           <button type="button" aria-disabled={busy || undefined} onClick={() => void create()}>
             {busy ? 'Creating…' : 'Create topic'}
