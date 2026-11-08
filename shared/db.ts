@@ -198,7 +198,10 @@ export async function listReports(db: D1Database, limit: number): Promise<Report
   }));
 }
 
-/** Counts one ingest for `did` in the hour containing `nowMs`; true while within `cap`. */
+/**
+ * Counts one event for `did` in the hour containing `nowMs`; true while within `cap`. Also used
+ * with a `card:<ip hash>` key for the link-card per-IP cap.
+ */
 export async function bumpAndCheckRate(db: D1Database, did: string, nowMs: number, cap: number): Promise<boolean> {
   const hour = Math.floor(nowMs / HOUR_MS);
   const row = await db

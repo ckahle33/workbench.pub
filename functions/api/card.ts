@@ -1,5 +1,7 @@
 import { Hono } from 'hono';
+import { bumpAndCheckRate } from '../../shared/db';
 import { isSafeUrl, safeFetch, type SafeFetchOptions } from '../../shared/ssrf';
+import { clientIp, hashIp } from './ipHash';
 import type { Env } from './read';
 
 export interface CardGithub {
@@ -26,6 +28,8 @@ const TITLE_MAX = 200;
 const DESCRIPTION_MAX = 500;
 const URL_MAX = 500;
 const CACHE_TTL_MS = 24 * 3_600_000;
+/** Uncached card builds (outbound fetch + D1 write) allowed per client IP per hour. */
+export const CARD_FETCHES_PER_IP_PER_HOUR = 60;
 const HEADERS = { accept: 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.1', 'user-agent': 'workbench.pub-linkcard/1' };
 const GITHUB_PATH = /^\/([A-Za-z0-9_.-]{1,100})\/([A-Za-z0-9_.-]{1,100})\/?$/;
 
@@ -188,6 +192,13 @@ export function cardRoutes(opts: CardOptions = {}): Hono<{ Bindings: Env }> {
     if (row) {
       c.header('Cache-Control', 'public, max-age=3600');
       return c.json(JSON.parse(row.data) as Card);
+    }
+
+    // Counted in ingest_counts under a `card:` key (pruned with the ingest counters).
+    const ipKey = `card:${await hashIp(c.env, clientIp((k) => c.req.header(k)))}`;
+    if (!(await bumpAndCheckRate(c.env.DB, ipKey, now, CARD_FETCHES_PER_IP_PER_HOUR))) {
+      c.header('Retry-After', '3600');
+      return c.json({ error: 'too many requests' }, 429);
     }
 
     let card: Card;

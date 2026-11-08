@@ -1,7 +1,8 @@
 import { env } from 'cloudflare:test';
 import { Hono } from 'hono';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { fetchCard, cardRoutes } from './card';
+import { CARD_FETCHES_PER_IP_PER_HOUR, fetchCard, cardRoutes } from './card';
+import { hashIp } from './ipHash';
 import type { Env } from './read';
 
 const db = (env as unknown as { DB: D1Database }).DB;
@@ -168,6 +169,7 @@ describe('fetchCard', () => {
 describe('GET /api/card', () => {
   beforeEach(async () => {
     await db.prepare('DELETE FROM link_cache').run();
+    await db.prepare('DELETE FROM ingest_counts').run();
   });
   const mk = (s: ReturnType<typeof stub>) => {
     const app = new Hono<{ Bindings: Env }>();
@@ -238,5 +240,40 @@ describe('GET /api/card', () => {
     expect(r.status).toBe(502);
     expect(s.calls).toEqual(['https://public.example/x']);
     expect((await db.prepare('SELECT COUNT(*) AS n FROM link_cache').first<{ n: number }>())!.n).toBe(0);
+  });
+});
+
+describe('GET /api/card per-IP cap', () => {
+  beforeEach(async () => {
+    await db.prepare('DELETE FROM link_cache').run();
+    await db.prepare('DELETE FROM ingest_counts').run();
+  });
+  const mk = (s: ReturnType<typeof stub>) => {
+    const app = new Hono<{ Bindings: Env }>();
+    app.route('/api', cardRoutes({ fetchFn: s.fn }));
+    return (path: string, ip = '203.0.113.7') => app.request(path, { headers: { 'CF-Connecting-IP': ip } }, bindings);
+  };
+  const q = (u: string) => `/api/card?url=${encodeURIComponent(u)}`;
+
+  it(`allows ${CARD_FETCHES_PER_IP_PER_HOUR} uncached fetches per IP per hour, then 429 without fetching`, async () => {
+    const s = stub(() => html(PAGE));
+    const get = mk(s);
+    const hash = await hashIp(bindings as unknown as Env, '203.0.113.7');
+    // Pretend this IP already used all but one of its uncached fetches this hour.
+    await db.prepare('INSERT INTO ingest_counts (did, hour, count) VALUES (?, ?, ?)')
+      .bind(`card:${hash}`, Math.floor(Date.now() / 3_600_000), CARD_FETCHES_PER_IP_PER_HOUR - 1).run();
+    expect((await get(q('https://example.com/a'))).status).toBe(200);
+    expect(s.calls).toHaveLength(1);
+    const limited = await get(q('https://example.com/b'));
+    expect(limited.status).toBe(429);
+    expect(await limited.json()).toEqual({ error: 'too many requests' });
+    expect(s.calls).toHaveLength(1);
+    // Cached cards are still served to the same IP.
+    expect((await get(q('https://example.com/a'))).status).toBe(200);
+    // Other IPs are unaffected.
+    expect((await get(q('https://example.com/b'), '198.51.100.2')).status).toBe(200);
+    // The raw IP is never stored.
+    const { results } = await db.prepare('SELECT did FROM ingest_counts').all<{ did: string }>();
+    expect(results.map((r) => r.did).join(' ')).not.toContain('203.0.113.7');
   });
 });

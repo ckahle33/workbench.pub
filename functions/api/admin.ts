@@ -1,5 +1,6 @@
 import { Hono, type Context } from 'hono';
 import { blockDid, hideUri, insertReport, listReports } from '../../shared/db';
+import { clientIp, hashIp, sha256 } from './ipHash';
 import type { Env } from './read';
 
 const REASON_MAX = 500;
@@ -8,18 +9,8 @@ const DID_MAX = 256;
 const BODY_MAX = 4096;
 const DAY_MS = 24 * 3_600_000;
 const REPORT_LIST_LIMIT = 200;
-// Used when IP_HASH_SALT is not configured; still keeps raw IPs out of the database.
-const DEFAULT_SALT = 'workbench.pub/report-ip/v1';
 const DID_RE = /^did:[a-z]+:[A-Za-z0-9._:%-]+$/;
 const URI_RE = /^at:\/\/[^\s]+$/;
-
-const enc = new TextEncoder();
-
-async function sha256(text: string): Promise<Uint8Array> {
-  return new Uint8Array(await crypto.subtle.digest('SHA-256', enc.encode(text)));
-}
-
-const hex = (b: Uint8Array): string => Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
 
 /**
  * Constant-time token check. Both sides are hashed to 32 bytes first, so the
@@ -61,8 +52,7 @@ export function adminRoutes(): Hono<{ Bindings: Env }> {
     if (!body || !validUri(body.uri) || typeof body.reason !== 'string' || body.reason.length > REASON_MAX) {
       return c.json({ error: 'bad request' }, 400);
     }
-    const ip = c.req.header('CF-Connecting-IP') ?? 'unknown';
-    const ipHash = hex(await sha256(`${c.env.IP_HASH_SALT || DEFAULT_SALT}:${ip}`));
+    const ipHash = await hashIp(c.env, clientIp((k) => c.req.header(k)));
     const now = Date.now();
     const outcome = await insertReport(c.env.DB, {
       uri: body.uri,
