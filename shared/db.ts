@@ -43,8 +43,7 @@ export async function upsertProject(db: D1Database, m: RecordMeta, r: ProjectRec
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(uri) DO UPDATE SET
          topic_slug = excluded.topic_slug, title = excluded.title, summary = excluded.summary,
-         status = excluded.status, cover = excluded.cover, created_at = excluded.created_at,
-         indexed_at = excluded.indexed_at`,
+         status = excluded.status, cover = excluded.cover, created_at = excluded.created_at`,
     )
     .bind(m.uri, m.did, m.rkey, r.topic, r.title, r.summary, r.status, json(r.cover), r.createdAt, m.indexedAt)
     .run();
@@ -58,7 +57,7 @@ export async function upsertUpdate(db: D1Database, m: RecordMeta, r: UpdateRecor
        ON CONFLICT(uri) DO UPDATE SET
          project_uri = excluded.project_uri, heading = excluded.heading, body = excluded.body,
          images = excluded.images, links = excluded.links, parts = excluded.parts,
-         created_at = excluded.created_at, indexed_at = excluded.indexed_at`,
+         created_at = excluded.created_at`,
     )
     .bind(m.uri, m.did, m.rkey, r.project, r.heading, r.body, json(r.images), json(r.links), json(r.parts), r.createdAt, m.indexedAt)
     .run();
@@ -71,7 +70,7 @@ export async function upsertReply(db: D1Database, m: RecordMeta, r: ReplyRecord)
        VALUES (?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(uri) DO UPDATE SET
          subject_uri = excluded.subject_uri, body = excluded.body,
-         created_at = excluded.created_at, indexed_at = excluded.indexed_at`,
+         created_at = excluded.created_at`,
     )
     .bind(m.uri, m.did, m.rkey, r.subject, r.body, r.createdAt, m.indexedAt)
     .run();
@@ -246,6 +245,9 @@ export async function bumpAndCheckRate(db: D1Database, did: string, nowMs: numbe
     .first<{ count: number }>();
   return (row?.count ?? 1) <= cap;
 }
+
+// Edits (re-upserts) of projects, updates and replies keep the ORIGINAL indexed_at, so an edited
+// old item does not jump to the top of lists and spam cannot stay on top by re-editing.
 
 // ---- Read side ---------------------------------------------------------------
 // Lists are ordered by `indexed_at` (server-assigned) then `uri`; `created_at` is

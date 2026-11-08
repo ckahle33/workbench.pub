@@ -46,6 +46,25 @@ describe('upserts', () => {
     expect(row!.title).toBe('two');
   });
 
+  it('an edit keeps the original indexed_at for projects, updates and replies (no jumping to the top)', async () => {
+    const at = (uri: string, t: number) => ({ ...meta(uri), indexedAt: t });
+    const P = 'at://did:plc:a/pub.workbench.project/p1';
+    const U = 'at://did:plc:a/pub.workbench.update/u1';
+    const R = 'at://did:plc:a/pub.workbench.reply/r1';
+    const upd = (heading: string) => ({ $type: 'pub.workbench.update' as const, project: P, heading, body: 'b', createdAt: '2026-01-01T00:00:00Z' });
+    const rep = (body: string) => ({ $type: 'pub.workbench.reply' as const, subject: U, body, createdAt: '2026-01-01T00:00:00Z' });
+    await upsertProject(db, at(P, 1000), project('one'));
+    await upsertUpdate(db, at(U, 1000), upd('one'));
+    await upsertReply(db, at(R, 1000), rep('one'));
+    await upsertProject(db, at(P, 9000), project('two'));
+    await upsertUpdate(db, at(U, 9000), upd('two'));
+    await upsertReply(db, at(R, 9000), rep('two'));
+    for (const [table, uri, col, v] of [['projects', P, 'title', 'two'], ['updates', U, 'heading', 'two'], ['replies', R, 'body', 'two']]) {
+      const row = await db.prepare(`SELECT indexed_at, ${col} AS v FROM ${table} WHERE uri = ?`).bind(uri).first<{ indexed_at: number; v: string }>();
+      expect(row, table).toEqual({ indexed_at: 1000, v });
+    }
+  });
+
   it('keeps hidden when a record is re-upserted', async () => {
     const uri = 'at://did:plc:a/pub.workbench.project/p1';
     await upsertProject(db, meta(uri), project('one'));
