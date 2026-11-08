@@ -81,7 +81,7 @@ describe('drainJetstream', () => {
     const r = await run(h.connect);
     expect(h.sockets).toHaveLength(1);
     expect(h.sockets[0].url).toBe(`${BASE}&cursor=5000000`);
-    expect(r).toEqual({ events: 3, cursor: 13_000_000, gap: false, errored: false });
+    expect(r).toEqual({ events: 3, cursor: 13_000_000, gap: false, errored: false, capped: false });
     expect(await getCursor(db)).toBe(13_000_000);
     const n = await db.prepare('SELECT COUNT(*) AS n FROM projects').first<{ n: number }>();
     expect(n?.n).toBe(2);
@@ -135,7 +135,7 @@ describe('drainJetstream', () => {
     const h = harness([(s) => s.emit('error')]);
     const r = await run(h.connect);
     expect(h.sockets).toHaveLength(1);
-    expect(r).toEqual({ events: 0, cursor: null, gap: true, errored: false });
+    expect(r).toEqual({ events: 0, cursor: null, gap: true, errored: false, capped: false });
     expect(await getCursor(db)).toBeNull();
   });
 
@@ -144,7 +144,7 @@ describe('drainJetstream', () => {
     const h = harness([(s) => s.emit('close'), (s) => s.send(identity(99_000_000))]);
     const r = await run(h.connect);
     expect(h.sockets.map((s) => s.url)).toEqual([`${BASE}&cursor=5000000`, BASE]);
-    expect(r).toEqual({ events: 1, cursor: 99_000_000, gap: true, errored: false });
+    expect(r).toEqual({ events: 1, cursor: 99_000_000, gap: true, errored: false, capped: false });
     expect(await getCursor(db)).toBe(99_000_000);
   });
 
@@ -153,7 +153,7 @@ describe('drainJetstream', () => {
     const h = harness([(s) => s.emit('error'), (s) => s.emit('close')]);
     const r = await run(h.connect);
     expect(h.sockets).toHaveLength(2);
-    expect(r).toEqual({ events: 0, cursor: 10_000_000, gap: true, errored: false });
+    expect(r).toEqual({ events: 0, cursor: 10_000_000, gap: true, errored: false, capped: false });
     expect(await getCursor(db)).toBe(10_000_000);
   });
 
@@ -185,7 +185,7 @@ describe('drainJetstream', () => {
       idleMs: 30,
       nowMs: () => 1_800_000_000_000,
     });
-    expect(r).toEqual({ events: 1, cursor: 1_000, gap: false, errored: true });
+    expect(r).toEqual({ events: 1, cursor: 1_000, gap: false, errored: true, capped: false });
     expect(await getCursor(db)).toBe(1_000);
     expect(h.sockets[0].closed).toBe(true);
   });
@@ -195,6 +195,123 @@ describe('drainJetstream', () => {
     const h = harness([() => {}]);
     const r = await run(h.connect);
     expect(h.sockets).toHaveLength(1);
-    expect(r).toEqual({ events: 0, cursor: 10_000_000, gap: false, errored: false });
+    expect(r).toEqual({ events: 0, cursor: 10_000_000, gap: false, errored: false, capped: false });
+  });
+});
+
+// ---- D1 query budget (Workers Free: 50 queries per invocation, a batch counts as 1) ----
+
+/** Mimics the platform: counts queries and throws once more than `limit` have been issued. */
+function limited(real: D1Database, limit: number) {
+  const state = { count: 0, max: 0 };
+  const realOf = new WeakMap<object, D1PreparedStatement>();
+  const spend = () => {
+    if (++state.count > limit) throw new Error('Too many API requests by single Worker invocation.');
+  };
+  const wrap = (st: D1PreparedStatement): D1PreparedStatement => {
+    const w = {
+      bind: (...a: unknown[]) => wrap(st.bind(...a)),
+      run: () => (spend(), st.run()),
+      first: (c?: string) => (spend(), st.first(c as never)),
+      all: () => (spend(), st.all()),
+      raw: () => (spend(), st.raw()),
+    } as unknown as D1PreparedStatement;
+    realOf.set(w, st);
+    return w;
+  };
+  const db = {
+    prepare: (sql: string) => wrap(real.prepare(sql)),
+    batch: (sts: D1PreparedStatement[]) => (spend(), real.batch(sts.map((x) => realOf.get(x) ?? x))),
+    exec: (sql: string) => (spend(), real.exec(sql)),
+  } as unknown as D1Database;
+  return { db, state };
+}
+
+/** A Jetstream stand-in: replays every event with time_us >= the cursor in the url, like the real thing. */
+const feed = (events: Array<{ time_us: number }>) => (s: FakeSocket) => {
+  const m = /cursor=(\d+)/.exec(s.url);
+  const from = m ? Number(m[1]) : 0;
+  for (const e of events) if (e.time_us >= from) s.send(e);
+};
+
+const drainWith = (db: D1Database, connect: (u: string) => SocketLike) =>
+  drainJetstream({ db, connect, endpoint: ENDPOINT, maxMs: 2000, idleMs: 30, nowMs: () => 1_800_000_000_000 });
+
+describe('drainJetstream query budget', () => {
+  it('applies a 40-event backlog across three runs, once each, never above 50 queries', async () => {
+    const events = Array.from({ length: 40 }, (_, i) => project(10_000_000 + i * 1_000_000, `p${i}`));
+    const results = [];
+    const cursors: Array<number | null> = [];
+    for (let run = 0; run < 3; run++) {
+      const { db: counted, state } = limited(db, 50);
+      const h = harness([feed(events)]);
+      results.push(await drainWith(counted, h.connect));
+      expect(state.count).toBeLessThanOrEqual(50);
+      cursors.push(await getCursor(db));
+    }
+    expect(results.map((r) => r.errored)).toEqual([false, false, false]);
+    expect(results.map((r) => r.capped)).toEqual([true, true, false]);
+    expect(cursors[0]).toBeLessThan(cursors[1]!);
+    expect(cursors[1]).toBeLessThan(cursors[2]!);
+    expect(cursors[2]).toBe(10_000_000 + 39 * 1_000_000);
+    const rows = await db.prepare('SELECT rkey FROM projects').all<{ rkey: string }>();
+    expect(rows.results.map((r) => r.rkey).sort()).toEqual(events.map((_, i) => `p${i}`).sort());
+    const idx = await db.prepare('SELECT SUM(count) AS n FROM ingest_counts').first<{ n: number }>();
+    // The last event of each capped run sits exactly at the saved cursor, so the next run re-applies it (idempotent upsert):
+    // 40 events + 2 tie replays. Everything below the cursor was skipped for free.
+    expect(idx?.n).toBe(42);
+  });
+
+  it('foreign and identity events do not spend the budget', async () => {
+    const noise = Array.from({ length: 100 }, (_, i) =>
+      i % 2 ? identity(1_000 + i) : { did: A, time_us: 1_000 + i, kind: 'commit', commit: { operation: 'create', collection: 'app.bsky.feed.post', rkey: `x${i}`, record: {} } },
+    );
+    const real = [project(2_000, 'r1'), project(2_001, 'r2'), project(2_002, 'r3')];
+    const { db: counted, state } = limited(db, 50);
+    const h = harness([feed([...noise, ...real])]);
+    const r = await drainWith(counted, h.connect);
+    expect(r.capped).toBe(false);
+    expect(r.errored).toBe(false);
+    expect((await db.prepare('SELECT COUNT(*) AS n FROM projects').first<{ n: number }>())?.n).toBe(3);
+    expect(state.count).toBeLessThanOrEqual(3 * 3 + 2);
+  });
+
+  it('replayed events below the saved cursor cost zero queries', async () => {
+    await setCursor(db, 100_000_000);
+    const old = Array.from({ length: 20 }, (_, i) => project(95_000_000 + i * 100_000, `old${i}`));
+    const { db: counted, state } = limited(db, 50);
+    const h = harness([(s) => old.forEach((e) => s.send(e))]);
+    const r = await drainWith(counted, h.connect);
+    expect(state.count).toBe(1); // getCursor only
+    expect(r).toEqual({ events: 0, cursor: 100_000_000, gap: false, errored: false, capped: false });
+    expect((await db.prepare('SELECT COUNT(*) AS n FROM projects').first<{ n: number }>())?.n).toBe(0);
+  });
+
+  it('still applies an event whose time_us equals the saved cursor', async () => {
+    await setCursor(db, 100_000_000);
+    const h = harness([(s) => s.send(project(100_000_000, 'tie'))]);
+    const r = await drainWith(db, h.connect);
+    expect(r.events).toBe(1);
+    expect((await db.prepare('SELECT COUNT(*) AS n FROM projects').first<{ n: number }>())?.n).toBe(1);
+  });
+
+  it('a setCursor failure is reported as errored and does not throw', async () => {
+    const failing = new Proxy(db, {
+      get(target, prop) {
+        if (prop === 'prepare') {
+          return (sql: string) => {
+            if (sql.includes('INSERT INTO cursor')) throw new Error('D1 down');
+            return target.prepare(sql);
+          };
+        }
+        const v = (target as any)[prop];
+        return typeof v === 'function' ? v.bind(target) : v;
+      },
+    });
+    const h = harness([(s) => s.send(identity(5))]);
+    const r = await drainWith(failing, h.connect);
+    expect(r.errored).toBe(true);
+    expect(r.cursor).toBeNull();
+    expect(await getCursor(db)).toBeNull();
   });
 });

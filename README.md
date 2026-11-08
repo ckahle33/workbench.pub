@@ -82,7 +82,7 @@ Consequence for the ingest Worker: the 50 query limit and the 10 ms CPU limit ar
    npx wrangler d1 create workbench
    ```
 
-2. Paste that id into `database_id` in both `wrangler.toml` and `ingest/wrangler.toml` (replace `00000000-0000-0000-0000-000000000000`). Nothing else needs editing: names, binding `DB`, the cron `*/5 * * * *`, the assets block and `compatibility_date = "2026-11-01"` are already set.
+2. Paste that id into `database_id` in both `wrangler.toml` and `ingest/wrangler.toml` (replace `00000000-0000-0000-0000-000000000000`). Nothing else needs editing: names, binding `DB`, the cron `* * * * *`, the assets block and `compatibility_date = "2026-11-01"` are already set.
 
 3. Apply the migrations to the remote database (reads `migrations_dir = "migrations"` from `wrangler.toml`; answer `y` to the prompt):
 
@@ -184,7 +184,7 @@ it exists) and `jsdom` (React, `src/`). Vitest 4 has no workspace file, so `vite
 
 ## Jetstream drain (ingest/)
 
-The cron Worker (`*/5 * * * *`) connects to `wss://jetstream2.us-east.bsky.network/subscribe` with
+The cron Worker (`* * * * *`, every minute) connects to `wss://jetstream2.us-east.bsky.network/subscribe` with
 `wantedCollections=pub.workbench.*&cursor=<saved time_us minus 5s>`, applies events, stores the highest
 `time_us` seen, and disconnects after 3 s of silence or 20 s total. It stops without advancing the cursor
 past an event if D1 fails. A saved cursor that fails immediately triggers one retry without a cursor and
@@ -226,3 +226,12 @@ No `jwks`: that is only for confidential clients.
 **Development** uses the library's loopback mode: client id `http://localhost?scope=...&redirect_uri=http://127.0.0.1:<port>/`
 (built in `buildLoopbackClientId`). Open the dev server via `http://127.0.0.1:<port>/`; the library redirects `localhost` there.
 Any non-loopback origin other than workbench.pub (previews) will fail the redirect check.
+
+Query budget: Workers Free allows 50 D1 queries per invocation (a `db.batch` counts as 1). A run spends 2 on the
+cursor and about 3 per event that reaches D1, so `MAX_EVENTS_PER_RUN = 15` (15 x 3 + 2 = 47) caps each run; when hit,
+the cursor is saved at the last processed event, the log shows `capped`, and the next run continues. Events that never
+touch D1 (foreign collections, identity/account) and replayed events older than the saved cursor are free; the event
+exactly at the cursor is re-applied each run (idempotent) and counts against the budget, as does its rate-limit bump.
+The every-minute cron therefore drains at most about 21,600 events per day. A failed cursor save is logged and reported
+as `errored` rather than thrown. The Free-plan 10 ms CPU limit for cron invocations is untested: whether 15 events fit
+is unknown until a deploy smoke test (watch `wrangler tail`).
