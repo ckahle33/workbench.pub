@@ -1,6 +1,6 @@
 import { env } from 'cloudflare:test';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { FEED_SCAN_WINDOW, hideUri, upsertFollow, upsertProject, upsertReply, upsertTopic, upsertUpdate } from '../../shared/db';
+import { FEED_SCAN_MULTIPLIER, FEED_SCAN_WINDOW, feedScanWindow, hideUri, upsertFollow, upsertProject, upsertReply, upsertTopic, upsertUpdate } from '../../shared/db';
 import app from '../index';
 import { readRoutes } from './read';
 
@@ -150,7 +150,8 @@ describe('feed scan bound', () => {
     let cursor: string | null = null;
     let pages = 0;
     do {
-      const res = await get(`/api/feed?limit=5${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`);
+      // limit 100: the scan window is the full FEED_SCAN_WINDOW (min(200, 100 * 3)).
+      const res = await get(`/api/feed?limit=100${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`);
       const body = (await res.json()) as { items: { rkey: string }[]; cursor: string | null };
       if (pages === 0) {
         expect(body.items).toEqual([]);
@@ -162,6 +163,31 @@ describe('feed scan bound', () => {
     } while (cursor && pages < 10);
     expect(seen).toEqual(['visible']);
     expect(pages).toBe(2);
+  });
+
+  it('sizes the scan window to the request: limit * FEED_SCAN_MULTIPLIER rows', async () => {
+    expect(feedScanWindow(5)).toBe(5 * FEED_SCAN_MULTIPLIER);
+    expect(feedScanWindow(100)).toBe(FEED_SCAN_WINDOW);
+    await seedProject(P1);
+    await seedUpdate(P1, 'visible', 100);
+    const ghost = `at://${ALICE}/pub.workbench.project/ghost`;
+    const stmts = [];
+    for (let i = 0; i < feedScanWindow(5) + 1; i++) {
+      stmts.push(db.prepare(
+        `INSERT INTO updates (uri, did, rkey, project_uri, heading, body, created_at, indexed_at)
+         VALUES (?, ?, ?, ?, 'h', 'b', 'x', ?)`,
+      ).bind(updUri(`o${i}`), ALICE, `o${i}`, ghost, 1000 + i));
+    }
+    await db.batch(stmts);
+    const first = (await (await get('/api/feed?limit=5')).json()) as { items: unknown[]; cursor: string | null };
+    expect(first.items).toEqual([]);
+    expect(first.cursor).not.toBeNull();
+    const next = (await (await get(`/api/feed?limit=5&cursor=${encodeURIComponent(first.cursor!)}`)).json()) as {
+      items: { rkey: string }[];
+      cursor: string | null;
+    };
+    expect(next.items.map((i) => i.rkey)).toEqual(['visible']);
+    expect(next.cursor).toBeNull();
   });
 });
 

@@ -326,13 +326,18 @@ function paginate<T extends { indexedAt: number; uri: string }>(rows: T[], limit
   return { items, cursor: rows.length > limit && last ? encodeCursor(last) : null };
 }
 
-/** Max update-index rows examined per feed request, regardless of `limit`. */
+/** Max update-index rows examined per feed request. */
 export const FEED_SCAN_WINDOW = 200;
+/** Rows scanned per requested item, so small pages read few rows. */
+export const FEED_SCAN_MULTIPLIER = 3;
+
+/** Update-index rows one feed request examines: min(FEED_SCAN_WINDOW, limit * FEED_SCAN_MULTIPLIER). */
+export const feedScanWindow = (limit: number): number => Math.min(FEED_SCAN_WINDOW, Math.max(1, limit) * FEED_SCAN_MULTIPLIER);
 
 /**
  * Global recent updates, or (with `followingDid`) those of followed projects and topics.
  *
- * Rows read per request are bounded: at most FEED_SCAN_WINDOW rows of the partial
+ * Rows read per request are bounded: at most feedScanWindow(limit) rows of the partial
  * update index are examined (keyset seek), each joined to its project by primary key.
  * Rows whose project is missing, hidden or not followed are skipped, so a page may
  * hold fewer than `limit` items; the cursor then points at the last row *scanned*
@@ -343,6 +348,7 @@ export async function listFeed(
   opts: { followingDid?: string; cursor?: ListCursor; limit: number },
 ): Promise<Page<FeedItem>> {
   const seek = opts.cursor ? 'AND (indexed_at, uri) < (?, ?)' : '';
+  const scanRows = feedScanWindow(opts.limit);
   const followed = opts.followingDid
     ? `AND (p.uri IN (SELECT subject_uri FROM follows WHERE did = ? AND hidden = 0)
         OR p.topic_slug IN (SELECT t.slug FROM follows f JOIN topics t ON t.slug = f.subject_uri
@@ -359,7 +365,7 @@ export async function listFeed(
       `SELECT w.*, p.did AS p_did, p.rkey AS p_rkey, p.title AS p_title, p.topic_slug AS p_topic,
               (p.uri IS NOT NULL AND p.hidden = 0 AND p.did = w.did ${followed}) AS visible
        FROM (SELECT * FROM updates WHERE hidden = 0 ${seek}
-             ORDER BY indexed_at DESC, uri DESC LIMIT ${FEED_SCAN_WINDOW}) w
+             ORDER BY indexed_at DESC, uri DESC LIMIT ${scanRows}) w
        LEFT JOIN projects p ON p.uri = w.project_uri
        ORDER BY w.indexed_at DESC, w.uri DESC`,
     )
@@ -381,7 +387,7 @@ export async function listFeed(
   if (visible.length > opts.limit) return { items, cursor: encodeCursor(items[items.length - 1]) };
   const lastScanned = results[results.length - 1];
   const cursor =
-    results.length === FEED_SCAN_WINDOW
+    results.length === scanRows
       ? encodeCursor({ indexedAt: lastScanned.indexed_at as number, uri: lastScanned.uri as string })
       : null;
   return { items, cursor };
