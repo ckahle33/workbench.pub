@@ -4,7 +4,7 @@ import { blobRoutes } from './api/blob';
 import { cardRoutes } from './api/card';
 import { readRoutes, type Env } from './api/read';
 import { defaultCache, edgeCache, type CacheProvider } from './edgeCache';
-import { shareMetaRoutes } from './shareMeta';
+import { shareMetaRoutes, type ShareMetaOptions } from './shareMeta';
 
 /** Seconds the anonymous global feed and the topic list are cached at the edge. */
 export const PUBLIC_LIST_MAX_AGE = 30;
@@ -14,6 +14,8 @@ export interface AppOptions {
   edgeCache?: CacheProvider | false;
   /** Cache for share-page meta (functions/shareMeta.ts); `false` turns it off (tests). */
   shareCache?: CacheProvider | false;
+  /** Overrides the share-page head rewrite (tests only). */
+  shareRewrite?: ShareMetaOptions['rewrite'];
 }
 
 // Builds the Hono app. Kept out of functions/index.ts: a Worker entry module may export only
@@ -33,7 +35,7 @@ export function createApp(opts: AppOptions = {}): Hono<{ Bindings: Env }> {
   app.route('/api', cardRoutes());
   app.route('/api', blobRoutes());
   app.route('/api', adminRoutes());
-  app.route('/', shareMetaRoutes({ cache: opts.shareCache ?? defaultCache }));
+  app.route('/', shareMetaRoutes({ cache: opts.shareCache ?? defaultCache, rewrite: opts.shareRewrite }));
   return app;
 }
 

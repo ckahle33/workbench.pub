@@ -5,9 +5,10 @@ import headersFile from '../public/_headers?raw';
 import wranglerToml from '../wrangler.toml?raw';
 import { blockDid, hideUri, putProfile, upsertProject, upsertReply, upsertTopic, upsertUpdate } from '../shared/db';
 import type { ImageDef } from '../shared/types';
-import { createApp } from './app';
+import { createApp, type AppOptions } from './app';
 import { SECURITY_HEADERS } from './securityHeaders';
-import { DEFAULT_DESCRIPTION, DEFAULT_IMAGE, DEFAULT_IMAGE_ALT, DEFAULT_TITLE, OG_PHOTO_MAX_BYTES, cleanText } from './shareMeta';
+import { cleanText } from '../shared/cleanText';
+import { DEFAULT_DESCRIPTION, DEFAULT_IMAGE, DEFAULT_IMAGE_ALT, DEFAULT_TITLE, OG_PHOTO_MAX_BYTES } from './shareMeta';
 
 const realDb = (env as unknown as { DB: D1Database }).DB;
 
@@ -48,12 +49,12 @@ const assets = {
 } as unknown as Fetcher;
 
 let n = 0;
-async function setup(withCache = true) {
+async function setup(withCache = true, assetsBinding: Fetcher | null = assets, shareRewrite?: AppOptions['shareRewrite']) {
   const cache = await caches.open(`share-test-${++n}-${Math.random()}`);
   const { db, counter } = countingDb();
-  const app = createApp({ edgeCache: false, shareCache: withCache ? async () => cache : false });
+  const app = createApp({ edgeCache: false, shareCache: withCache ? async () => cache : false, shareRewrite });
   const get = (path: string, init: RequestInit = {}) =>
-    app.request(`https://workbench.pub${path}`, init, { ...env, DB: db, ASSETS: assets });
+    app.request(`https://workbench.pub${path}`, init, { ...env, DB: db, ASSETS: assetsBinding ?? undefined });
   return { get, counter, cache };
 }
 
@@ -327,7 +328,7 @@ describe('share meta: hostile text', () => {
     "it's a \"quoted\" & <b>bold</b> title &amp; &quot;",
     '</title><script>x</script>',
     'Pedal 🎸👩🏽‍🔧 build',
-    'مشروع جديد ‮evil‬ done',
+    'مشروع جديد \u202eevil\u202c done',
     'x'.repeat(5000),
   ];
 
@@ -350,19 +351,9 @@ describe('share meta: hostile text', () => {
       expect(h.meta['og:title']).toBe(expected);
       expect(h.title).toBe(`${expected} · workbench.pub`);
       expect([...new Intl.Segmenter().segment(h.meta['og:title'])].length).toBeLessThanOrEqual(70);
-      expect(h.meta['og:title']).not.toMatch(/[‪-‮⁦-⁩]/);
+      expect(h.meta['og:title']).not.toMatch(/[\u202a-\u202e\u2066-\u2069]/);
     });
   }
-
-  it('cleanText strips control characters, collapses whitespace and truncates by graphemes', () => {
-    expect(cleanText('a\u0000b\u0007c\u001b[31m', 70)).toBe('abc[31m');
-    expect(cleanText('  one\n\ttwo \r\n three  ', 70)).toBe('one two three');
-    expect(cleanText('abcdef', 4)).toBe('abc…');
-    expect(cleanText('👩🏽‍🔧👩🏽‍🔧👩🏽‍🔧', 2)).toBe('👩🏽‍🔧…');
-    expect(cleanText('ab‮cd⁦ef', 70)).toBe('abcdef');
-    expect(cleanText('\uD800lone', 70)).toBe('�lone');
-    expect(cleanText('word word word', 11)).toBe('word word…');
-  });
 });
 
 describe('share meta: caching and headers', () => {
@@ -426,6 +417,61 @@ describe('share meta: caching and headers', () => {
     const { get } = await setup();
     const r = await get('/api/topics');
     expect(r.headers.get('content-type')).toMatch(/json/);
+  });
+});
+
+describe('share meta: failures never become an error page', () => {
+  const shellResponse = () => new Response(indexHtml, { headers: { 'content-type': 'text/html; charset=utf-8' } });
+  /** An ASSETS stub whose first `failures` calls misbehave via `fail`, then serves the shell. */
+  const flaky = (failures: number, fail: () => Response) => {
+    let calls = 0;
+    return { fetch: async () => (++calls <= failures ? fail() : shellResponse()) } as unknown as Fetcher;
+  };
+  const expectShell = async (r: Response) => {
+    expect(r.status).toBe(200);
+    for (const [k, v] of Object.entries(SECURITY_HEADERS)) expect(r.headers.get(k), k).toBe(v);
+    expectDefault(await readHead(r));
+  };
+
+  it('serves the unmodified shell when ASSETS.fetch throws once', async () => {
+    await seedProject();
+    const { get } = await setup(true, flaky(1, () => { throw new Error('assets down'); }));
+    await expectShell(await get(`/p/${ALICE}/p1`));
+  });
+
+  it('serves the unmodified shell when the rewriter throws, synchronously or while reading', async () => {
+    await seedProject();
+    const throwsNow = () => {
+      throw new Error('rewriter broke');
+    };
+    const throwsLater = () =>
+      new Response(new ReadableStream({ pull: (ctrl) => ctrl.error(new Error('rewriter broke mid-stream')) }));
+    for (const rw of [throwsNow, throwsLater]) {
+      const { get } = await setup(false, assets, rw);
+      await expectShell(await get(`/p/${ALICE}/p1`));
+    }
+  });
+
+  it('answers 503 text with the security headers when the shell cannot be read at all', async () => {
+    await seedProject();
+    for (const binding of [flaky(99, () => { throw new Error('assets down'); }), null]) {
+      const { get } = await setup(true, binding);
+      const r = await get(`/p/${ALICE}/p1`);
+      expect(r.status).toBe(503);
+      expect(r.headers.get('content-type')).toMatch(/^text\/plain/);
+      for (const [k, v] of Object.entries(SECURITY_HEADERS)) expect(r.headers.get(k), k).toBe(v);
+    }
+  });
+
+  it('reads at most a bounded prefix of long text columns from D1', async () => {
+    await seedProject({ summary: '' });
+    await seedUpdate('u1', { body: 'x'.repeat(50_000), heading: 'h'.repeat(5_000) });
+    const { get } = await setup(false);
+    const p = await readHead(await get(`/p/${ALICE}/p1`));
+    expect(p.meta['description'].endsWith('…')).toBe(true);
+    const u = await readHead(await get(`/u/${ALICE}/u1`));
+    expect([...u.meta['og:title']].length).toBeLessThanOrEqual(70 + 3 + 50);
+    expect(u.meta['description'].endsWith('…')).toBe(true);
   });
 });
 

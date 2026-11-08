@@ -1,5 +1,6 @@
 import { isValidDid, isValidRecordKey } from '@atproto/syntax';
 import { Hono, type Context } from 'hono';
+import { cleanText } from '../shared/cleanText';
 import { getTopic } from '../shared/db';
 import { proxiesBlob } from './api/blob';
 import type { Env } from './api/read';
@@ -29,6 +30,8 @@ export const SHARE_META_MAX_AGE = 300;
 const TITLE_MAX = 70;
 const DESCRIPTION_MAX = 200;
 const ALT_MAX = 200;
+/** Characters of any text column read from D1: more than cleanText's cap for a 200-grapheme description. */
+const TEXT_COLUMN_MAX = 2000;
 const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 export interface ShareMeta {
@@ -46,27 +49,14 @@ export interface ShareMeta {
 export interface ShareMetaOptions {
   /** Cache for found entities' meta; `false` turns it off (tests). Default `caches.default`. */
   cache?: CacheProvider | false;
+  /** The head rewrite; injectable so tests can make it fail. Default: HTMLRewriter (`rewrite`). */
+  rewrite?: (shell: Response, meta: ShareMeta) => Response;
 }
 
 // ---- Untrusted text ---------------------------------------------------------------
 
-// C0/C1 controls (after whitespace is collapsed) and bidi embedding, override and isolate marks,
-// which can visually reorder the rest of a preview line. Ordinary RTL text is kept.
-const CONTROL = /[\u0000-\u001f\u007f-\u009f‪-‮⁦-⁩﻿]/g;
-const LONE_SURROGATE = /[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/g;
-const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
-
-/**
- * Makes user text safe and short for a meta tag: well-formed UTF-16, whitespace collapsed to
- * single spaces, control and bidi-control characters removed, truncated to `max` graphemes with
- * an ellipsis. Escaping is left to HTMLRewriter.
- */
-export function cleanText(input: string, max: number): string {
-  const s = input.replace(LONE_SURROGATE, '\ufffd').replace(/\s+/g, ' ').replace(CONTROL, '').replace(/\s+/g, ' ').trim();
-  const graphemes = [...segmenter.segment(s)];
-  if (graphemes.length <= max) return s;
-  return graphemes.slice(0, max - 1).map((g) => g.segment).join('').trimEnd() + '…';
-}
+// cleanText (shared/cleanText.ts) caps its input before any work, so CPU does not grow with
+// the size of a title, summary or 50 KB update body.
 
 // ---- Lookups (one D1 query each) --------------------------------------------------
 
@@ -116,10 +106,10 @@ async function projectMeta(db: D1Database, did: string, rkey: string, url: strin
   // Same filters as getProjectWithUpdates: visible project; only its author's visible updates.
   const r = await db
     .prepare(
-      `SELECT p.title, p.summary, p.cover,
+      `SELECT substr(p.title, 1, ${TEXT_COLUMN_MAX}) AS title, substr(p.summary, 1, ${TEXT_COLUMN_MAX}) AS summary, p.cover,
          (SELECT u.images FROM updates u WHERE u.project_uri = p.uri AND u.hidden = 0 AND u.did = p.did
             AND u.images IS NOT NULL AND u.images != '[]' ORDER BY u.indexed_at DESC, u.uri DESC LIMIT 1) AS images,
-         (SELECT u.body FROM updates u WHERE u.project_uri = p.uri AND u.hidden = 0 AND u.did = p.did
+         (SELECT substr(u.body, 1, ${TEXT_COLUMN_MAX}) FROM updates u WHERE u.project_uri = p.uri AND u.hidden = 0 AND u.did = p.did
             ORDER BY u.indexed_at DESC, u.uri DESC LIMIT 1) AS latest_body
        FROM projects p WHERE p.uri = ? AND p.hidden = 0`,
     )
@@ -139,7 +129,8 @@ async function updateMeta(db: D1Database, did: string, rkey: string, url: string
   // Same filters as getUpdateWithReplies: visible update on a visible project by the same DID.
   const r = await db
     .prepare(
-      `SELECT u.heading, u.body, u.images, p.title AS p_title, p.cover AS p_cover
+      `SELECT substr(u.heading, 1, ${TEXT_COLUMN_MAX}) AS heading, substr(u.body, 1, ${TEXT_COLUMN_MAX}) AS body, u.images,
+              substr(p.title, 1, ${TEXT_COLUMN_MAX}) AS p_title, p.cover AS p_cover
        FROM updates u JOIN projects p ON p.uri = u.project_uri
        WHERE u.uri = ? AND u.hidden = 0 AND p.hidden = 0 AND u.did = p.did`,
     )
@@ -172,8 +163,8 @@ async function profileMeta(db: D1Database, did: string, url: string): Promise<Sh
       `SELECT (EXISTS(SELECT 1 FROM projects WHERE did = ?1 AND hidden = 0)
             OR EXISTS(SELECT 1 FROM updates WHERE did = ?1 AND hidden = 0)
             OR EXISTS(SELECT 1 FROM replies WHERE did = ?1 AND hidden = 0)) AS known,
-              (SELECT handle FROM profiles WHERE did = ?1) AS handle,
-              (SELECT display_name FROM profiles WHERE did = ?1) AS display_name`,
+              (SELECT substr(handle, 1, ${TEXT_COLUMN_MAX}) FROM profiles WHERE did = ?1) AS handle,
+              (SELECT substr(display_name, 1, ${TEXT_COLUMN_MAX}) FROM profiles WHERE did = ?1) AS display_name`,
     )
     .bind(did)
     .first<Row>();
@@ -288,6 +279,12 @@ function finish(body: BodyInit | null, shell: Response): Response {
   return new Response(body, { status: shell.status, headers });
 }
 
+/** The SPA shell. `/` is the shell itself (`/index.html` would redirect under the default html_handling). Throws without ASSETS. */
+function fetchShell(c: Context<{ Bindings: Env }>): Promise<Response> {
+  if (!c.env.ASSETS) throw new Error('ASSETS binding missing');
+  return c.env.ASSETS.fetch(new Request(new URL('/', c.req.url), { headers: { accept: 'text/html' } }));
+}
+
 // The shared tsconfig also loads the DOM lib, whose CacheStorage lacks the Workers `default`.
 const workersDefaultCache: CacheProvider = async () => (caches as unknown as { default: Cache }).default;
 const cacheKey = (pathname: string) => new Request(`https://cache.internal/share-meta/v1${pathname}`);
@@ -299,12 +296,11 @@ const cacheKey = (pathname: string) => new Request(`https://cache.internal/share
 export function shareMetaRoutes(opts: ShareMetaOptions = {}): Hono<{ Bindings: Env }> {
   const app = new Hono<{ Bindings: Env }>();
   const cacheProvider = opts.cache ?? workersDefaultCache;
+  const rewriteFn = opts.rewrite ?? rewrite;
 
-  const handler = async (c: Context<{ Bindings: Env }>) => {
+  const render = async (c: Context<{ Bindings: Env }>): Promise<Response> => {
     const reqUrl = new URL(c.req.url);
-    if (!c.env.ASSETS) return c.text('assets binding missing', 500);
-    // `/` is the shell itself (`/index.html` would redirect under the default html_handling).
-    const shell = await c.env.ASSETS.fetch(new Request(new URL('/', reqUrl), { headers: { accept: 'text/html' } }));
+    const shell = await fetchShell(c);
     const route = parseRoute(reqUrl.pathname);
     if (!shell.ok || !route) return finish(shell.body, shell);
 
@@ -329,12 +325,29 @@ export function shareMetaRoutes(opts: ShareMetaOptions = {}): Hono<{ Bindings: E
         }
       }
     } catch {
-      meta = null; // D1 or cache trouble: the default card, never an error page
+      meta = null; // D1 or cache trouble: the default card
     }
     if (!meta) return finish(shell.body, shell);
-    return finish(await rewrite(shell, meta).text(), shell);
+    return finish(await rewriteFn(shell, meta).text(), shell);
   };
 
+  // Any failure (ASSETS, D1, cache, rewriter) serves a fresh, unmodified shell; a share page must
+  // never become Hono's 500. Only if the shell itself cannot be read is the answer a plain 503.
+  const handler = async (c: Context<{ Bindings: Env }>): Promise<Response> => {
+    try {
+      return await render(c);
+    } catch {
+      try {
+        const shell = await fetchShell(c);
+        return finish(shell.body, shell);
+      } catch {
+        return finish('Temporarily unavailable. Try again in a moment.', new Response(null, { status: 503, headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' } }));
+      }
+    }
+  };
+
+  // The bare prefixes are not in run_worker_first; they are here so a request that reaches the
+  // Worker anyway (e.g. app.request in tests) still gets the shell rather than Hono's 404.
   for (const prefix of ['/p/*', '/u/*', '/t/*', '/profile/*', '/p', '/u', '/t', '/profile']) app.get(prefix, handler);
   return app;
 }

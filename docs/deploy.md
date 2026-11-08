@@ -43,7 +43,7 @@ Consequence for the ingest Worker: the 50 query limit and the 10 ms CPU limit ar
    npm run db:migrate:remote
    ```
 
-4. Build and deploy the web Worker (runs typecheck, `vite build`, then `wrangler deploy`). With the `[[routes]]` block in `wrangler.toml` this also attaches `workbench.pub` as a Custom Domain. If the domain step fails, fix the zone/CNAME problem and redeploy, or delete the `[[routes]]` block and add the domain in the dashboard (Workers & Pages, workbench-pub, Settings, Domains & Routes).
+4. Build and deploy the web Worker (runs typecheck, `vite build`, then `wrangler deploy`). Share pages (`/p/*`, `/u/*`, `/t/*`, `/profile/*`) run the Worker on every request and count toward the Free 100,000 requests/day. If daily Worker requests (dashboard: Workers & Pages, workbench-pub, Metrics) pass about 60,000, move to Workers Paid or remove `/t/*` and `/profile/*` from `run_worker_first` (the project and update routes carry the value). With the `[[routes]]` block in `wrangler.toml` this also attaches `workbench.pub` as a Custom Domain. If the domain step fails, fix the zone/CNAME problem and redeploy, or delete the `[[routes]]` block and add the domain in the dashboard (Workers & Pages, workbench-pub, Settings, Domains & Routes).
 
    ```bash
    npm run deploy:web
