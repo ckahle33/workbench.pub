@@ -13,6 +13,9 @@ export const OAUTH_SCOPE = [
   'blob:image/*',
 ].join(' ');
 
+/** com.atproto.identity.resolveHandle service the OAuth client uses to turn handles into DIDs. */
+export const HANDLE_RESOLVER = 'https://bsky.social';
+
 export const PRODUCTION_CLIENT_ID = 'https://workbench.pub/client-metadata.json';
 
 const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);

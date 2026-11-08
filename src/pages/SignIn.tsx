@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { Navigate } from 'react-router-dom';
 import { normalizeIdentifier } from '../auth/config';
-import { signIn } from '../auth/oauth';
+import { signIn, SignInError } from '../auth/oauth';
 import { useSession } from '../auth/SessionContext';
 import { useTitle } from '../hooks';
 
@@ -25,8 +25,12 @@ export function SignIn() {
     setBusy(true);
     try {
       await signIn(handle);
-    } catch {
-      setError('Could not start sign-in. Check the handle and try again.');
+    } catch (err) {
+      setError(
+        err instanceof SignInError && err.reason === 'invalid-handle'
+          ? 'Could not start sign-in. Check the handle and try again.'
+          : 'Sign-in is unavailable right now. Try again later.',
+      );
       setBusy(false);
     }
   }

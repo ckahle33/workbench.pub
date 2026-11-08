@@ -1,11 +1,12 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { Agent } from '@atproto/api';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { restoreSession, signIn } from '../auth/oauth';
+import { restoreSession, signIn, SignInError } from '../auth/oauth';
 import { SessionProvider } from '../auth/SessionContext';
 import { SignIn } from './SignIn';
 
-vi.mock('../auth/oauth', () => ({
+vi.mock('../auth/oauth', async (importOriginal) => ({
+  SignInError: (await importOriginal<typeof import('../auth/oauth')>()).SignInError,
   restoreSession: vi.fn(),
   signOut: vi.fn(),
   signIn: vi.fn(),
@@ -56,7 +57,15 @@ describe('SignIn page', () => {
     await submit('alice.bsky.social');
     const alert = await screen.findByRole('alert');
     expect(alert).not.toHaveTextContent(/secret internal/);
+    expect(alert).toHaveTextContent('Sign-in is unavailable right now. Try again later.');
     expect(screen.getByRole('button', { name: /sign in/i })).toBeEnabled();
+  });
+
+  it('asks to check the handle when the handle does not resolve', async () => {
+    vi.mocked(signIn).mockRejectedValue(new SignInError('invalid-handle'));
+    renderPage();
+    await submit('nobody.bsky.social');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Check the handle and try again.');
   });
 
   it('redirects home when already signed in', async () => {

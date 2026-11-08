@@ -1,6 +1,6 @@
 import { Agent } from '@atproto/api';
 import { BrowserOAuthClient, type OAuthSession } from '@atproto/oauth-client-browser';
-import { buildLoopbackClientId, isLoopbackHost, PRODUCTION_CLIENT_ID } from './config';
+import { buildLoopbackClientId, HANDLE_RESOLVER, isLoopbackHost, normalizeIdentifier, PRODUCTION_CLIENT_ID } from './config';
 
 export interface Session {
   did: string;
@@ -12,11 +12,55 @@ let clientPromise: Promise<BrowserOAuthClient> | null = null;
 let restorePromise: Promise<Session | null> | null = null;
 let current: OAuthSession | null = null;
 
+/**
+ * Why sign-in failed: `invalid-handle` means the input is not a handle/DID or does not resolve
+ * to an account; `unavailable` is anything else (network, authorization server, configuration).
+ */
+export type SignInFailure = 'invalid-handle' | 'unavailable';
+
+export class SignInError extends Error {
+  readonly reason: SignInFailure;
+  constructor(reason: SignInFailure) {
+    super(reason === 'invalid-handle' ? 'Invalid handle' : 'Sign-in unavailable');
+    this.name = 'SignInError';
+    this.reason = reason;
+  }
+}
+
+/**
+ * Logs a failure for operators with the error name and message only. URLs (which can carry
+ * OAuth `code`/`state` parameters) and anything after `code=`/`state=`/`token` are redacted.
+ */
+export function logAuthFailure(context: string, err: unknown): void {
+  const name = err instanceof Error ? err.name : typeof err;
+  const message = err instanceof Error ? err.message : '';
+  const clean = message
+    .replace(/[a-z][a-z0-9+.-]*:\/\/\S+/gi, '[url]')
+    .replace(/\b(code|state|iss|[a-z_]*token)=\S*/gi, '$1=[redacted]')
+    .slice(0, 200);
+  console.error(`[auth] ${context} failed: ${name}: ${clean}`);
+}
+
+/** True when the identity (handle or DID) did not resolve, as opposed to a service failure. */
+function isUnresolvedIdentity(err: unknown): boolean {
+  for (let e: unknown = err, depth = 0; e instanceof Error && depth < 5; e = e.cause, depth++) {
+    if (e.name === 'IdentityResolverError') return true;
+  }
+  return false;
+}
+
+/** Exposed for tests: the memoized real client. */
+export function loadOAuthClient(): Promise<BrowserOAuthClient> {
+  return getClient();
+}
+
 function getClient(): Promise<BrowserOAuthClient> {
   clientPromise ??= BrowserOAuthClient.load({
     clientId: isLoopbackHost(window.location.hostname)
       ? buildLoopbackClientId(window.location)
       : PRODUCTION_CLIENT_ID,
+    // Required: without a handle or identity resolver the OAuthClient constructor throws.
+    handleResolver: HANDLE_RESOLVER,
   });
   clientPromise.catch(() => {
     clientPromise = null;
@@ -25,9 +69,16 @@ function getClient(): Promise<BrowserOAuthClient> {
 }
 
 /** Starts the redirect to the user's authorization server. Navigates away on success. */
-export async function signIn(handle: string): Promise<void> {
-  const client = await getClient();
-  await client.signInRedirect(handle);
+export async function signIn(input: string): Promise<void> {
+  const handle = normalizeIdentifier(input);
+  if (!handle) throw new SignInError('invalid-handle');
+  try {
+    const client = await getClient();
+    await client.signInRedirect(handle);
+  } catch (err) {
+    logAuthFailure('sign-in', err);
+    throw new SignInError(isUnresolvedIdentity(err) ? 'invalid-handle' : 'unavailable');
+  }
 }
 
 async function toSession(oauthSession: OAuthSession): Promise<Session> {
@@ -59,7 +110,8 @@ export function restoreSession(): Promise<Session | null> {
     }
     return toSession(result.session);
   })();
-  restorePromise.catch(() => {
+  restorePromise.catch((err: unknown) => {
+    logAuthFailure('session restore', err);
     restorePromise = null;
   });
   return restorePromise;
