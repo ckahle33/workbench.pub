@@ -32,7 +32,7 @@ export function edgeCache(opts: {
     try {
       c.executionCtx.waitUntil(put);
     } catch {
-      await put; // no execution context (tests): store before returning
+      await put.catch(() => {}); // no execution context (tests): store before returning
     }
   };
 }

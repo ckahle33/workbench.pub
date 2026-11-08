@@ -23,9 +23,10 @@ const didDoc = (pds: string, id = DID) =>
   });
 const happy = (pds = 'https://pds.example.com', type = 'image/png') =>
   stub((u) => (u.startsWith('https://plc.directory/') ? didDoc(pds) : new Response(PNG, { headers: { 'content-type': type } })));
+// Edge caching is off here (each test sees fresh fetches); it is covered in 'edge caching' below.
 const get = (s: ReturnType<typeof stub>, path: string) => {
   const app = new Hono<{ Bindings: Env }>();
-  app.route('/api', blobRoutes({ fetchFn: s.fn }));
+  app.route('/api', blobRoutes({ fetchFn: s.fn, cache: false }));
   return app.request(path, {}, bindings);
 };
 
@@ -56,7 +57,7 @@ describe('GET /api/blob/:did/:cid', () => {
   it('never forwards cookies or auth headers, and uses manual redirects', async () => {
     const s = happy();
     const app = new Hono<{ Bindings: Env }>();
-    app.route('/api', blobRoutes({ fetchFn: s.fn }));
+    app.route('/api', blobRoutes({ fetchFn: s.fn, cache: false }));
     await app.request(`/api/blob/${DID}/${CID}`, { headers: { cookie: 'session=1', authorization: 'Bearer x' } }, bindings);
     for (const c of s.calls) {
       const h = new Headers(c.init?.headers);
@@ -129,5 +130,64 @@ describe('GET /api/blob/:did/:cid', () => {
     const r = await get(stub(() => new Response('x', { status: 500 })), `/api/blob/${DID}/${CID}`);
     expect(r.status).toBe(404);
     expect(r.headers.get('cache-control')).toBe('no-store');
+  });
+});
+
+describe('GET /api/blob edge caching', () => {
+  let n = 0;
+  const cachedApp = async (s: ReturnType<typeof stub>) => {
+    const cache = await caches.open(`blob-test-${++n}-${Math.random()}`);
+    const app = new Hono<{ Bindings: Env }>();
+    app.route('/api', blobRoutes({ fetchFn: s.fn, cache: async () => cache }));
+    return { cache, get: (path: string) => app.request(`https://workbench.pub${path}`, {}, bindings) };
+  };
+
+  it('serves a second request for the same blob from the cache without fetching', async () => {
+    const s = happy();
+    const { get } = await cachedApp(s);
+    expect((await get(`/api/blob/${DID}/${CID}`)).status).toBe(200);
+    expect(s.calls).toHaveLength(2);
+    const r = await get(`/api/blob/${DID}/${CID}`);
+    expect(r.status).toBe(200);
+    expect(r.headers.get('content-type')).toBe('image/png');
+    expect(r.headers.get('content-security-policy')).toBe("default-src 'none'; sandbox");
+    expect(new Uint8Array(await r.arrayBuffer())).toEqual(PNG);
+    expect(s.calls).toHaveLength(2);
+  });
+
+  it('caches the DID to PDS resolution: another blob of the same DID skips plc.directory', async () => {
+    const s = happy();
+    const { get } = await cachedApp(s);
+    await get(`/api/blob/${DID}/${CID}`);
+    const other = 'bafkrei' + 'b'.repeat(45);
+    expect((await get(`/api/blob/${DID}/${other}`)).status).toBe(200);
+    expect(s.calls.filter((c) => c.url.startsWith('https://plc.directory/'))).toHaveLength(1);
+    expect(s.calls).toHaveLength(3);
+  });
+
+  it('does not cache a failed resolution or a 404', async () => {
+    let fail = true;
+    const s = stub((u) => {
+      if (u.startsWith('https://plc.directory/')) return fail ? new Response('down', { status: 503 }) : didDoc('https://pds.example.com');
+      return new Response(PNG, { headers: { 'content-type': 'image/png' } });
+    });
+    const { get, cache } = await cachedApp(s);
+    expect((await get(`/api/blob/${DID}/${CID}`)).status).toBe(404);
+    expect(await cache.match(`https://cache.internal/did/${DID}`)).toBeUndefined();
+    expect(await cache.match(`https://workbench.pub/api/blob/${DID}/${CID}`)).toBeUndefined();
+    fail = false;
+    expect((await get(`/api/blob/${DID}/${CID}`)).status).toBe(200);
+  });
+
+  it('never caches refused content types, and SSRF checks still run before any PDS fetch', async () => {
+    const s = happy('https://pds.example.com', 'text/html');
+    const { get, cache } = await cachedApp(s);
+    expect((await get(`/api/blob/${DID}/${CID}`)).status).toBe(404);
+    expect(await cache.match(`https://workbench.pub/api/blob/${DID}/${CID}`)).toBeUndefined();
+    const unsafe = stub((u) => (u.startsWith('https://plc.directory/') ? didDoc('http://169.254.169.254') : new Response(PNG)));
+    const second = await cachedApp(unsafe);
+    expect((await second.get(`/api/blob/${DID}/${CID}`)).status).toBe(404);
+    expect(unsafe.calls).toHaveLength(1);
+    expect(await second.cache.match(`https://cache.internal/did/${DID}`)).toBeUndefined();
   });
 });
