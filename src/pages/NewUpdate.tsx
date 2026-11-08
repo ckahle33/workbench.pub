@@ -31,6 +31,8 @@ import { crosspostFailureNotice } from '../records/errors';
 import { createUpdate } from '../records/write';
 import { LIMITS } from '../../shared/lexicons';
 
+const CONFIRM_MS = 1500;
+
 function readFlag(key: string): boolean {
   try {
     return !!key && window.localStorage.getItem(key) === '1';
@@ -60,6 +62,16 @@ export function NewUpdate() {
   const [busy, setBusy] = useState(false);
   const [postedHref, setPostedHref] = useState<string | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
+  // Set once the person has left this page (unmount or a click on a link), so late results never navigate or set state.
+  const leftRef = useRef(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => {
+    leftRef.current = false;
+    return () => {
+      leftRef.current = true;
+      clearTimeout(timerRef.current);
+    };
+  }, []);
   // Cross-post: opt-in, remembered per account; null means "not chosen on this page yet".
   const [crosspostChoice, setCrosspostChoice] = useState<boolean | null>(null);
   const [captionEdit, setCaptionEdit] = useState<string | null>(null);
@@ -201,14 +213,23 @@ export function NewUpdate() {
             description: body.trim(),
             thumb: first && images[0] ? { ref: first.image, original: images[0].file } : undefined,
           });
-          afterWrite(() => setCrosspostState('done'));
         } catch (err) {
-          afterWrite(() => setCrosspostNotice(crosspostFailureNotice(err)));
-          afterWrite(() => setCrosspostState('idle'));
+          // If they already left, createCrosspost has logged it; there is nowhere to show it.
+          if (!leftRef.current) {
+            afterWrite(() => setCrosspostNotice(crosspostFailureNotice(err)));
+            afterWrite(() => setCrosspostState('idle'));
+          }
           return; // stay on this page so the notice can be read
         }
+        if (leftRef.current) return;
+        // Show the confirmation for a moment, then go to the project unless they have left.
+        afterWrite(() => setCrosspostState('done'));
+        timerRef.current = setTimeout(() => {
+          if (!leftRef.current) navigate(href);
+        }, CONFIRM_MS);
+        return;
       }
-      afterWrite(() => navigate(href));
+      if (!leftRef.current) afterWrite(() => navigate(href));
     } catch (err) {
       setSubmitError(err instanceof PhotoError ? err.message : writeErrorMessage(err, 'post your update'));
       setBusy(false);
@@ -221,9 +242,12 @@ export function NewUpdate() {
         <h1>Add update</h1>
         <p role="status">{POSTED_TEXT}</p>
         {crosspostState === 'posting' && <p role="status">Posting to Bluesky…</p>}
+        {crosspostState === 'done' && <p role="status">Posted to Bluesky.</p>}
         {crosspostNotice && <p role="status">{crosspostNotice}</p>}
         <p>
-          <Link to={postedHref}>Back to the project</Link>
+          <Link to={postedHref} onClick={() => (leftRef.current = true)}>
+            Back to the project
+          </Link>
         </p>
       </section>
     );

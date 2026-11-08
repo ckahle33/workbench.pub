@@ -17,6 +17,21 @@ vi.mock('../records/image', async (importOriginal) => ({
   resizeImage: vi.fn(),
 }));
 
+const nav = vi.hoisted(() => ({ calls: [] as string[] }));
+vi.mock('react-router-dom', async (orig) => {
+  const actual = await orig<typeof import('react-router-dom')>();
+  return {
+    ...actual,
+    useNavigate: () => {
+      const real = actual.useNavigate();
+      return (to: string) => {
+        nav.calls.push(to);
+        real(to);
+      };
+    },
+  };
+});
+
 const CID = 'bafkreihdwdcefgh4dqkjv67uzcmw7ojee6xedzdetojuzjevtenxquvyku';
 const UPDATE_URI = `at://${ALICE}/pub.workbench.update/3kupdate`;
 const blobDef = { image: { $type: 'blob' as const, ref: { $link: CID }, mimeType: 'image/jpeg', size: 1234 }, alt: 'A board' };
@@ -32,12 +47,16 @@ function renderPage() {
   );
 }
 
+/** console.error calls other than React's act() test warnings (the page itself updates state outside act in tests). */
+const realErrors = () => vi.mocked(console.error).mock.calls.map((c) => String(c[0])).filter((m) => !m.includes('act(...)'));
+
 const fill = (label: RegExp | string, value: string) => fireEvent.change(screen.getByLabelText(label), { target: { value } });
 const submit = () => fireEvent.click(screen.getByRole('button', { name: /post update/i }));
 const box = () => screen.getByRole('checkbox', { name: /also post this to bluesky/i });
 const png = (name: string) => new File(['x'], name, { type: 'image/png' });
 
 beforeEach(() => {
+  nav.calls.length = 0;
   localStorage.clear();
   h.session = { did: ALICE, handle: 'alice.test', agent: {} };
   mockApi((u) => (u.pathname === `/api/projects/${ALICE}/p1` ? { project: { title: 'Synth' }, items: [], cursor: null } : undefined));
@@ -103,7 +122,7 @@ describe('cross-post to Bluesky (opt-in)', () => {
     fireEvent.click(box());
     await waitFor(() => expect((screen.getByLabelText(/bluesky caption/i) as HTMLTextAreaElement).value).toBe('Synth: Cut the panel'));
     submit();
-    await screen.findByText('timeline page');
+    await screen.findByText('timeline page', {}, { timeout: 3000 });
     expect(order).toEqual(['update', 'crosspost']);
     const [, input] = vi.mocked(createCrosspost).mock.calls[0];
     expect(input.url).toBe(`https://workbench.pub/u/${ALICE}/3kupdate`);
@@ -173,5 +192,48 @@ describe('cross-post to Bluesky (opt-in)', () => {
     expect(screen.getAllByRole('alert').map((a) => a.textContent).join(' ')).toMatch(/caption/i);
     expect(document.activeElement).toBe(caption);
     expect(createUpdate).not.toHaveBeenCalled();
+  });
+
+  async function fillAndTick() {
+    renderPage();
+    fill(/heading/i, 'h');
+    fill(/notes/i, 'n');
+    fireEvent.click(box());
+    await waitFor(() => expect((screen.getByLabelText(/bluesky caption/i) as HTMLTextAreaElement).value).toBe('Synth: h'));
+    submit();
+  }
+
+  it('confirms "Posted to Bluesky" in the posted view, then goes to the project', async () => {
+    await fillAndTick();
+    expect(await screen.findByText(/posted to bluesky\./i)).toBeInTheDocument();
+    expect(await screen.findByText('timeline page', {}, { timeout: 3000 })).toBeInTheDocument();
+    expect(nav.calls).toEqual([`/p/${ALICE}/p1`]);
+  });
+
+  it('does not navigate, and nothing crashes, when the user leaves mid-cross-post and it then succeeds', async () => {
+    let resolve!: (v: { uri: string }) => void;
+    vi.mocked(createCrosspost).mockReturnValue(new Promise((r) => (resolve = r)));
+    await fillAndTick();
+    await screen.findByText(/posting to bluesky/i);
+    fireEvent.click(screen.getByRole('link', { name: /back to the project/i }));
+    expect(await screen.findByText('timeline page')).toBeInTheDocument();
+    resolve({ uri: 'at://x/app.bsky.feed.post/1' });
+    await new Promise((r) => setTimeout(r, 1800));
+    expect(nav.calls).toEqual([]);
+    expect(realErrors()).toEqual([]);
+  });
+
+  it('does not crash or navigate when the user leaves and the cross-post then fails', async () => {
+    let reject!: (e: unknown) => void;
+    vi.mocked(createCrosspost).mockReturnValue(new Promise((_, rej) => (reject = rej)));
+    await fillAndTick();
+    await screen.findByText(/posting to bluesky/i);
+    fireEvent.click(screen.getByRole('link', { name: /back to the project/i }));
+    await screen.findByText('timeline page');
+    reject(new WriteError('x', { stage: 'crosspost', status: 500, errorName: 'InternalServerError' }));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(nav.calls).toEqual([]);
+    expect(screen.getByText('timeline page')).toBeInTheDocument();
+    expect(realErrors()).toEqual([]);
   });
 });
