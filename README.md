@@ -12,7 +12,7 @@ Status: deployed at https://workbench.pub (web Worker, ingest cron and D1 are li
 your account (PDS) --> Jetstream --> cron Worker --> D1 index --> Hono API --> React app
 ```
 
-- `src/`: React app (Vite, React Router)
+- `src/`: React app (Vite, React Router). `/` is the splash for signed-out visitors (signed-in visitors go to `/feed`); the feed is at `/feed`, the long-form explanation at `/about`.
 - `functions/`: Hono API (reads, link cards, image proxy, reports, admin)
 - `ingest/`: cron Worker copying new `pub.workbench.*` records from Jetstream into D1
 - `shared/`, `lexicons/`, `migrations/`: record schemas and validation, D1 schema

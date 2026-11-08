@@ -27,10 +27,25 @@ Rules: `--rule` 2px ink (under header, above sections, asides, lists, form secti
 - Mono label (`.label`, `.meta-line`): 12-13px, uppercase, 0.04em, `--muted`. Handles and DIDs keep their case (`.as-is`).
 - Dates `MM.DD.YYYY` (US, month first, viewer's local timezone), all produced by `formatDate` in `src/format.ts`; no time of day is shown, in `<time dateTime>` with the ISO value; tabular numerals on dates and counts.
 
+## Pages and routes
+
+| Route | Page | Notes |
+|---|---|---|
+| `/` | Splash (`src/pages/Splash.tsx`) | Signed out only. Signed in: redirect to `/feed`. While the session loads: an empty `.splash-pending` block (no flash, no shift). |
+| `/feed` | Feed (`Feed.tsx`) | Everyone. Topic filter, "Latest" title, Following / Everyone for signed-in users. |
+| `/t/:slug` | Topic | Filter aside with the topic current, ruled project table. |
+| `/p/:did/:rkey` | Project | Numbered timeline, FACTS / PARTS aside. |
+| `/p/:did/:rkey/update`, `/new` | Add update, New project | Forms. |
+| `/u/:did/:rkey` | Update | Single update, replies. |
+| `/profile/:did` | Profile | Giant name, count strip, project table. |
+| `/about` | About | Long-form explanation and honest limits; the splash links here instead of repeating it. |
+| `/signin` | Sign in | Redirects to `/feed` when already signed in. |
+| `*` | 404 | Giant `404`, link to `/feed`. |
+
 ## Components
 
 - Footer: a 2px rule, the wordmark label at the left, About and GitHub links at the right (`SiteFooter`), on every page.
-- Header: wordmark `workbench.pub` (red dot), nav (Latest, About, New project black button), right group (profile link, Sign out / Sign in) with `margin-left: auto`; current page underlined 2px, offset 6px.
+- Header: wordmark `workbench.pub` (red dot, links to `/`), nav (Feed → `/feed`, About, New project black button), right group (profile link, Sign out / Sign in) with `margin-left: auto`; current page underlined 2px, offset 6px.
 - Buttons: square. Default = white, 2px ink border, 600 14px, 44px min height. `.btn-primary` = ink fill (hover accent). `.btn-small` 1px border for owner actions. `.btn-text` underlined text button. `.btn-danger` accent border. `[aria-disabled=true]` / `:disabled` = grey border, muted text, `progress` / `not-allowed` cursor, no hover change.
 - Status badge: square, 1px border, 13px/600. In progress = accent; finished = ink; paused = dashed muted.
 - Project page: 12-column head (meta line, title, summary span 7, author + Follow span 5), timeline (`96px | 1fr`, numeral from `updateCount`, newest red), aside of `.side-block`s (FACTS `dl`, PARTS chips, Report).
@@ -41,6 +56,7 @@ Rules: `--rule` 2px ink (under header, above sections, asides, lists, form secti
 - Count strip (profile): 4 columns of 48px/800 numbers; only when the whole list is loaded.
 - Forms: mono caps labels above square 1px ink fields, 16px text, 48px min height, 2px ink focus outline offset 2px; invalid = 2px accent border + accent message (`role=alert`); counts in mono, right-aligned; fieldsets are ruled sections with a 24px/800 legend; select chevron drawn with gradients; file input button styled as a secondary button; submit row under a 2px rule.
 - States: loading = mono `LOADING…` line; empty / not found = boxed sentence + next action; error = accent-bordered box; Load more = full-width secondary button.
+- Splash (`src/styles/splash.css`): the persuade page and the most designed one. Hero `clamp(56px, 17vw, 208px)` / .84 / -0.06em with a red full stop, a 2px rule, lede (span 7) beside the black "Sign in with Bluesky" button and a mono "Free." line. A static example timeline, labelled with an inverted mono `EXAMPLE` flag and an accessible name saying it is not a real post, reuses `.timeline`/`.entry`, with typographic tiles instead of photos and no links. Three steps with 72-120px numerals on one ruled row (stacked under 700px). "Yours to keep." as a ruled two-column statement. Up to three live `FeedCard`s (hidden when empty or failing). It closes on the one inverted (ink) block on the site, with a white button. Section titles are `clamp(40px, 6vw, 72px)`, sections are `--s-7` apart.
 - Browser surfaces: `::selection` ink/white, accent caret, ink-on-panel scrollbars, underline offset 0.2em.
 
 ## Do / don't
