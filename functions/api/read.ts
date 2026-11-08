@@ -18,6 +18,8 @@ import {
 
 export interface Env {
   DB: D1Database;
+  /** Workers static assets (wrangler.toml [assets]); the share-meta routes read the HTML shell from it. */
+  ASSETS?: Fetcher;
   /** Cloudflare secret (`wrangler secret put ADMIN_TOKEN`). Admin routes are closed while unset or empty. */
   ADMIN_TOKEN?: string;
   /** Optional secret salt for hashing reporter IPs. */

@@ -22,7 +22,16 @@ const MAX_BLOB_BYTES = 5 * 1024 * 1024;
 const DID_DOC_MAX_BYTES = 64 * 1024;
 const BLOB_TIMEOUT_MS = 10_000;
 // Never svg or html: blobs are served from our own origin.
-const IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/avif']);
+export const IMAGE_TYPES: ReadonlySet<string> = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/avif']);
+
+/**
+ * True when the proxy would attempt `/api/blob/<did>/<cid>` for a blob whose record claims
+ * `mimeType`: a resolvable DID, a CID, and an allowlisted raster type. (The proxy still checks
+ * the content type the PDS actually returns.)
+ */
+export function proxiesBlob(did: string, cid: string, mimeType: string): boolean {
+  return CID.test(cid) && didDocUrl(did) !== null && IMAGE_TYPES.has(mimeType.toLowerCase());
+}
 
 function didDocUrl(did: string): string | null {
   if (DID_PLC.test(did)) return `https://plc.directory/${did}`;

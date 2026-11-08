@@ -8,8 +8,11 @@ compatibility_flags = ["nodejs_compat"]
 directory = "./dist"
 binding = "ASSETS"
 not_found_handling = "single-page-application"
-# Only /api/* runs the Worker; everything else is served from static assets.
-run_worker_first = ["/api/*"]
+# The Worker runs first only for /api/* and the four share pages (per-page link-preview meta,
+# functions/shareMeta.ts). Everything else, including /assets/*, fonts, /og.png and the favicons,
+# is served straight from static assets. `*` matches deeply (so /p/* also covers /p/:did/:rkey/update,
+# which the Worker passes through unchanged). Checked by functions/shareMeta.test.ts.
+run_worker_first = ["/api/*", "/p/*", "/u/*", "/t/*", "/profile/*"]
 
 # Attaches workbench.pub as a Custom Domain on `wrangler deploy`. Requires workbench.pub to be an active zone
 # on Cloudflare (no existing CNAME on the apex). Delete this block to attach the domain in the dashboard instead.
