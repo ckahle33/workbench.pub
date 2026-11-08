@@ -102,6 +102,17 @@ function onePass(o: DrainOptions, url: string, saved: number | null, used: () =>
         resolve(pass);
       });
     };
+    /**
+     * Reached the live tail: every event before startUs has been delivered (Jetstream sends in time_us order) and
+     * handled, so the cursor may move to startUs - 1. This is what lets a pass that started with no cursor (the
+     * first run ever, or the gap retry) store one; without it such a pass stops on its first frame and no run ever
+     * saves a cursor. Only reached when the pass is neither capped nor errored.
+     */
+    const catchUp = () => {
+      pass.caughtUp = true;
+      pass.lastUs = Math.max(pass.lastUs ?? 0, startUs - 1);
+      finish();
+    };
     const armIdle = () => {
       clearTimeout(idleTimer);
       idleTimer = setTimeout(finish, o.idleMs);
@@ -122,8 +133,7 @@ function onePass(o: DrainOptions, url: string, saved: number | null, used: () =>
           if (!m) return;
           const t = Number(m[1]);
           if (t >= startUs) {
-            pass.caughtUp = true;
-            finish();
+            catchUp();
             return;
           }
           pass.ignored++;
@@ -140,8 +150,7 @@ function onePass(o: DrainOptions, url: string, saved: number | null, used: () =>
         if (typeof ev?.time_us !== 'number') return;
         // Live tail reached: stop instead of idling on network-wide traffic. This event is left for the next run.
         if (ev.time_us >= startUs) {
-          pass.caughtUp = true;
-          finish();
+          catchUp();
           return;
         }
         // Replay of the 5 s rewind window: events below the saved cursor were already applied, so skip them at zero

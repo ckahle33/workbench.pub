@@ -208,6 +208,78 @@ describe('drainJetstream', () => {
   });
 });
 
+// ---- Realistic clock: nowMs about 1.78e12 ms, so startUs about 1.78e15 and event time_us near it ----
+
+describe('drainJetstream with a realistic clock', () => {
+  const NOW_MS = 1_780_000_000_000;
+  const START_US = NOW_MS * 1000;
+  const runAt = (connect: (u: string) => SocketLike) =>
+    drainJetstream({ db, connect, endpoint: ENDPOINT, maxMs: 2000, idleMs: 30, nowMs: () => NOW_MS });
+
+  it('first run with no cursor: the live tail catches up at once and a cursor is stored', async () => {
+    const h = harness([(s) => s.send(identity(START_US + 1_000))]);
+    const r = await runAt(h.connect);
+    expect(h.sockets[0].url).toBe(BASE);
+    expect(r.caughtUp).toBe(true);
+    expect(r.cursor).toBe(START_US - 1);
+    expect(await getCursor(db)).toBe(START_US - 1);
+    // The next run resumes from there and applies a new commit.
+    const next = harness([feed([project(START_US + 2_000, 'p1')])]);
+    const later = await drainJetstream({ db, connect: next.connect, endpoint: ENDPOINT, maxMs: 2000, idleMs: 30, nowMs: () => NOW_MS + 60_000 });
+    expect(next.sockets[0].url).toBe(`${BASE}&cursor=${START_US - 1 - 5_000_000}`);
+    expect(later).toMatchObject({ applied: 1, cursor: START_US + 2_000 });
+  });
+
+  it('first run with no cursor stores a cursor even when the first frame is a commit at the tail', async () => {
+    const h = harness([(s) => s.send(project(START_US + 5, 'live'))]);
+    const r = await runAt(h.connect);
+    expect(r).toMatchObject({ applied: 0, caughtUp: true, cursor: START_US - 1 });
+    expect(await getCursor(db)).toBe(START_US - 1);
+  });
+
+  it('gap retry: a stale cursor that fails is retried at the live tail, and that pass stores a cursor', async () => {
+    const stale = START_US - 3 * 86_400_000_000; // three days old
+    await setCursor(db, stale);
+    const h = harness([(s) => s.emit('close'), (s) => s.send(identity(START_US + 10))]);
+    const r = await runAt(h.connect);
+    expect(h.sockets.map((x) => x.url)).toEqual([`${BASE}&cursor=${stale - 5_000_000}`, BASE]);
+    expect(r).toMatchObject({ gap: true, caughtUp: true, cursor: START_US - 1 });
+    expect(await getCursor(db)).toBe(START_US - 1);
+  });
+
+  it('a saved cursor with an older backlog drains it over several runs and stops at the tail', async () => {
+    const saved = START_US - 60_000_000; // one minute behind
+    await setCursor(db, saved);
+    const backlog = Array.from({ length: 20 }, (_, i) => project(saved + 1_000_000 + i * 1_000_000, `b${i}`));
+    const tail = identity(START_US + 100);
+    const results = [];
+    for (let i = 0; i < 3; i++) {
+      const { db: counted, state } = limited(db, 50);
+      results.push(
+        await drainJetstream({ db: counted, connect: harness([feed([...backlog, tail])]).connect, endpoint: ENDPOINT, maxMs: 2000, idleMs: 30, nowMs: () => NOW_MS }),
+      );
+      expect(state.count).toBeLessThanOrEqual(48);
+      if (results.at(-1)!.caughtUp) break;
+    }
+    expect(results[0]).toMatchObject({ capped: true, caughtUp: false, applied: 15 });
+    expect(results.at(-1)).toMatchObject({ capped: false, caughtUp: true });
+    expect((await db.prepare('SELECT COUNT(*) AS n FROM projects').first<{ n: number }>())!.n).toBe(20);
+    expect(await getCursor(db)).toBe(START_US - 1);
+  });
+
+  it('an idle live-tail run leaves the cursor unchanged; it only ever moves forward', async () => {
+    await setCursor(db, START_US - 1_000);
+    const idle = await runAt(harness([() => {}]).connect);
+    expect(idle).toMatchObject({ caughtUp: false, cursor: START_US - 1_000 });
+    expect(await getCursor(db)).toBe(START_US - 1_000);
+    // A saved cursor already past the start time is never moved back by a caught-up run.
+    await setCursor(db, START_US + 50_000);
+    const r = await runAt(harness([(s) => s.send(identity(START_US + 60_000))]).connect);
+    expect(r.caughtUp).toBe(true);
+    expect(await getCursor(db)).toBe(START_US + 50_000);
+  });
+});
+
 // ---- D1 query budget (Workers Free: 50 queries per invocation, a batch counts as 1) ----
 
 /** Mimics the platform: counts queries and throws once more than `limit` have been issued. */
