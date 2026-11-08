@@ -20,7 +20,7 @@ export const DEFAULT_TITLE = 'workbench.pub: show how it’s made';
 export const DEFAULT_DESCRIPTION =
   'Post a project as a dated timeline of photos and notes, from the first parts on the bench to the finished thing. Sign in with your Bluesky account; your posts stay in it.';
 export const DEFAULT_IMAGE = `${SITE}/og.png`;
-export const DEFAULT_IMAGE_ALT = 'workbench.pub: Show how it’s made. Projects as dated timelines of photos and notes.';
+export const DEFAULT_IMAGE_ALT = 'workbench.pub. Show how it’s made. Projects as dated timelines: 01 parts, 02 photos, 03 notes, 04 finished.';
 /** Photos larger than this (record `size`) are not used as the card image; Bluesky caps thumbs near 1 MB. */
 export const OG_PHOTO_MAX_BYTES = 900_000;
 /** Seconds a found entity's meta is kept in the edge cache (hidden content can linger this long). */
