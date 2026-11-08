@@ -262,7 +262,7 @@ describe('drainJetstream query budget', () => {
     expect(r.capped).toBe(false);
     expect(r.errored).toBe(false);
     expect((await db.prepare('SELECT COUNT(*) AS n FROM projects').first<{ n: number }>())?.n).toBe(3);
-    expect(state.count).toBeLessThanOrEqual(3 * 3 + 2);
+    expect(state.count).toBeLessThanOrEqual(3 * 3 + 3); // 3 events + getCursor, prune, save
   });
 
   it('replayed events below the saved cursor cost zero queries', async () => {
@@ -271,7 +271,7 @@ describe('drainJetstream query budget', () => {
     const { db: counted, state } = limited(db, 50);
     const h = harness([(s) => old.forEach((e) => s.send(e))]);
     const r = await drainWith(counted, h.connect);
-    expect(state.count).toBe(1); // getCursor only
+    expect(state.count).toBe(2); // getCursor + ingest_counts prune
     expect(r).toEqual({ applied: 0, rejected: 0, ignored: 20, cursor: 100_000_000, gap: false, errored: false, errorStreak: 0, capped: false, caughtUp: false });
     expect((await db.prepare('SELECT COUNT(*) AS n FROM projects').first<{ n: number }>())?.n).toBe(0);
   });
@@ -331,20 +331,20 @@ describe('drainJetstream query budget', () => {
     expect((await db.prepare('SELECT COUNT(*) AS n FROM projects').first<{ n: number }>())?.n).toBe(3);
   });
 
-  it('exact boundary: 15 normal events use 47 D1 queries (+2 sockets reserved) and are not capped; 16 are capped after 15', async () => {
+  it('exact boundary: 15 normal events use 48 D1 queries (+2 sockets reserved) and are not capped; 16 are capped after 15', async () => {
     const mk = (n: number) => Array.from({ length: n }, (_, i) => project(10_000_000 + i * 1_000_000, `b${i}`));
     {
       const { db: counted, state } = limited(db, 50);
       const r = await drainWith(counted, harness([feed(mk(15))]).connect);
       expect(r).toMatchObject({ applied: 15, capped: false, errored: false });
-      expect(state.count).toBe(47);
+      expect(state.count).toBe(48);
     }
     for (const t of ['projects', 'cursor', 'ingest_counts']) await db.prepare(`DELETE FROM ${t}`).run();
     {
       const { db: counted, state } = limited(db, 50);
       const r = await drainWith(counted, harness([feed(mk(16))]).connect);
       expect(r).toMatchObject({ applied: 15, capped: true, errored: false });
-      expect(state.count).toBe(47);
+      expect(state.count).toBe(48);
       expect(state.count + 2).toBeLessThanOrEqual(50); // with both possible sockets counted as subrequests
       expect((await db.prepare('SELECT COUNT(*) AS n FROM projects').first<{ n: number }>())?.n).toBe(15);
     }
@@ -418,6 +418,39 @@ describe('drainJetstream query budget', () => {
     expect(ok).toMatchObject({ errored: false, errorStreak: 0, applied: 1 });
     expect((await drainWith(failing, harness([feed([project(3_000, 'again')])]).connect)).errorStreak).toBe(1);
     errSpy.mockRestore();
+  });
+
+  it('prunes at most 50 ingest_counts rows older than 2 days per run, keeping recent ones', async () => {
+    const nowHour = Math.floor(1_800_000_000_000 / 3_600_000);
+    const stmts = [];
+    for (let i = 0; i < 60; i++) stmts.push(db.prepare('INSERT INTO ingest_counts (did, hour, count) VALUES (?, ?, 1)').bind(`did:plc:old${i}`, nowHour - 49));
+    stmts.push(db.prepare('INSERT INTO ingest_counts (did, hour, count) VALUES (?, ?, 1)').bind('did:plc:recent', nowHour - 47));
+    await db.batch(stmts);
+    await drainWith(db, harness([() => {}]).connect);
+    const left = await db.prepare('SELECT COUNT(*) AS n FROM ingest_counts').first<{ n: number }>();
+    expect(left!.n).toBe(11); // 60 old - 50 pruned + 1 recent
+    await drainWith(db, harness([() => {}]).connect);
+    const rows = await db.prepare('SELECT did FROM ingest_counts').all<{ did: string }>();
+    expect(rows.results.map((r) => r.did)).toEqual(['did:plc:recent']);
+  });
+
+  it('a failed prune does not stop the run', async () => {
+    const failing = new Proxy(db, {
+      get(target, prop) {
+        if (prop === 'prepare') {
+          return (sql: string) => {
+            if (sql.includes('DELETE FROM ingest_counts')) throw new Error('D1 down');
+            return target.prepare(sql);
+          };
+        }
+        const v = (target as any)[prop];
+        return typeof v === 'function' ? v.bind(target) : v;
+      },
+    });
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const r = await drainWith(failing, harness([feed([project(2_000, 'p')])]).connect);
+    spy.mockRestore();
+    expect(r).toMatchObject({ applied: 1, errored: false });
   });
 
   it('countQueries counts without throwing when no limit is set', async () => {

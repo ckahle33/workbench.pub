@@ -246,6 +246,18 @@ export async function bumpAndCheckRate(db: D1Database, did: string, nowMs: numbe
   return (row?.count ?? 1) <= cap;
 }
 
+/** Hourly counters (ingest rate cap, link-card IP cap) are kept this many hours. */
+export const INGEST_COUNTS_RETENTION_HOURS = 48;
+const INGEST_COUNTS_PRUNE_BATCH = 50;
+
+/** Deletes up to 50 counter rows older than the retention window: one bounded query. */
+export async function pruneIngestCounts(db: D1Database, nowMs: number): Promise<void> {
+  await db
+    .prepare('DELETE FROM ingest_counts WHERE rowid IN (SELECT rowid FROM ingest_counts WHERE hour < ? LIMIT ?)')
+    .bind(Math.floor(nowMs / HOUR_MS) - INGEST_COUNTS_RETENTION_HOURS, INGEST_COUNTS_PRUNE_BATCH)
+    .run();
+}
+
 // Edits (re-upserts) of projects, updates and replies keep the ORIGINAL indexed_at, so an edited
 // old item does not jump to the top of lists and spam cannot stay on top by re-editing.
 

@@ -1,4 +1,4 @@
-import { getCursor, saveRunState } from '../../shared/db';
+import { getCursor, pruneIngestCounts, saveRunState } from '../../shared/db';
 import { applyEvent, type JetstreamEvent } from './apply';
 import { countQueries } from './queryBudget';
 
@@ -43,12 +43,12 @@ export interface DrainResult {
  * Budget by D1 queries, not events. Workers Free allows PLATFORM_QUERY_LIMIT = 50 per invocation (a db.batch counts
  * as 1). applyEvent spends at most WORST_CASE_EVENT_COST = 3 (blocked check, rate bump, write); foreign, identity and
  * replay-skipped events cost 0, a blocked DID 1, a rejected record 2. The run also needs CURSOR_SAVE_RESERVE = 1 for
- * saveRunState (getCursor has already been counted by then).
+ * saveRunState (getCursor and the one bounded ingest_counts prune have already been counted by then).
  *
  * WEBSOCKET_RESERVE = 2: we could not confirm whether D1 queries and subrequests share the 50 limit, so assume they
  * do and keep room for the Jetstream socket plus the gap-retry socket. Before each event we require
- * used + 3 + 1 + 2 <= 50, so all-normal events give floor((50 - 1 getCursor - 1 save - 2 sockets) / 3) = 15 per run
- * (47 D1 queries + 2 sockets = 49).
+ * used + 3 + 1 + 2 <= 50, so all-normal events give floor((50 - 1 getCursor - 1 prune - 1 save - 2 sockets) / 3) = 15
+ * per run (48 D1 queries + 2 sockets = 50).
  */
 const PLATFORM_QUERY_LIMIT = 50;
 const WORST_CASE_EVENT_COST = 3;
@@ -184,6 +184,12 @@ export async function drainJetstream(opts: DrainOptions): Promise<DrainResult> {
   const o: DrainOptions = { ...opts, db: counted.db };
   const startUs = o.nowMs() * 1000;
   const saved = await getCursor(o.db);
+  try {
+    await pruneIngestCounts(o.db, o.nowMs());
+  } catch (err) {
+    // Housekeeping only: never let it stop ingest.
+    console.error('ingest_counts prune failed', err instanceof Error ? err.name : 'unknown');
+  }
   const base = `${o.endpoint}?${WANTED}`;
   let gap = false;
 
