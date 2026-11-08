@@ -499,9 +499,15 @@ export async function getProjectWithUpdates(
   uri: string,
   cursor?: ListCursor,
   limit = 50,
-): Promise<{ project: ProjectView; updates: UpdateView[]; cursor: string | null } | null> {
+): Promise<{ project: ProjectView & { updateCount: number }; updates: UpdateView[]; cursor: string | null } | null> {
   const p = await db.prepare('SELECT * FROM projects WHERE uri = ? AND hidden = 0').bind(uri).first<Row>();
   if (!p) return null;
+  // Total visible updates by the project's author (same filter as the list), so the client can
+  // number entries across pages. `+did` keeps the planner on idx_updates_project_visible.
+  const counted = await db
+    .prepare('SELECT COUNT(*) AS n FROM updates WHERE project_uri = ? AND hidden = 0 AND +did = ?')
+    .bind(uri, p.did)
+    .first<{ n: number }>();
   const seek = cursor ? 'AND (indexed_at, uri) < (?, ?)' : '';
   const { results } = await db
     .prepare(
@@ -511,7 +517,7 @@ export async function getProjectWithUpdates(
     .bind(...(cursor ? [uri, p.did, cursor.indexedAt, cursor.uri, limit + 1] : [uri, p.did, limit + 1]))
     .all<Row>();
   const page = paginate(results.map(toUpdate), limit);
-  return { project: toProject(p), updates: page.items, cursor: page.cursor };
+  return { project: { ...toProject(p), updateCount: counted?.n ?? 0 }, updates: page.items, cursor: page.cursor };
 }
 
 /**

@@ -261,6 +261,31 @@ describe('projects, updates, profiles', () => {
     expect(page3.cursor).toBeNull();
   });
 
+  it('returns the total visible update count with every page of a project', async () => {
+    await seedProject(P1);
+    for (let i = 1; i <= 5; i++) await seedUpdate(P1, `u${i}`, 100 + i);
+    await seedUpdate(P1, 'evil', 200, BOB); // not the project's author: not counted, as not listed
+    await hideUri(db, updUri('u2'));
+    type Body = { project: { updateCount: number }; items: { rkey: string }[]; cursor: string | null };
+    const page1 = (await (await get(`/api/projects/${ALICE}/p1?limit=2`)).json()) as Body;
+    expect(page1.project.updateCount).toBe(4);
+    const page2 = (await (await get(`/api/projects/${ALICE}/p1?limit=2&cursor=${encodeURIComponent(page1.cursor!)}`)).json()) as Body;
+    expect(page2.project.updateCount).toBe(4);
+    await seedProject(P2);
+    const empty = (await (await get(`/api/projects/${BOB}/p2`)).json()) as Body;
+    expect(empty.project.updateCount).toBe(0);
+  });
+
+  it('counts project updates by index, not a table scan', async () => {
+    const plan = await db
+      .prepare('EXPLAIN QUERY PLAN SELECT COUNT(*) AS n FROM updates WHERE project_uri = ? AND hidden = 0 AND +did = ?')
+      .bind(P1, ALICE)
+      .all<{ detail: string }>();
+    const text = plan.results.map((r) => r.detail).join('\n');
+    expect(text).toMatch(/SEARCH updates USING INDEX idx_updates_project_visible/);
+    expect(text).not.toMatch(/SCAN/);
+  });
+
   it('rejects a bad project cursor and clamps the limit', async () => {
     await seedProject(P1);
     expect((await get(`/api/projects/${ALICE}/p1?cursor=garbage`)).status).toBe(400);
