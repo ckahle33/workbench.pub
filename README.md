@@ -1,8 +1,41 @@
 # workbench.pub
 
-React + Vite + React Router frontend, Hono API, Cloudflare D1, and a cron Worker (`ingest/`).
+A social site for makers who show their work as it happens. Post a project (a guitar pedal, a
+recording, a ceramic piece) and add updates over days or weeks: photos, notes, links, parts lists.
+Follow projects and topics, and reply to individual updates.
 
-## Deployment target: Workers with static assets (not Pages)
+It is built on the [AT Protocol](https://atproto.com). You sign in with an existing Bluesky/AT
+account, and your projects, updates and replies are stored as records in your own account
+(`pub.workbench.*`), not on our servers. This site indexes them and displays them.
+
+Status: in development. The backend is built; the sign-in is built; the pages are in progress.
+
+## How it works
+
+```
+your account (PDS) --> Jetstream --> cron Worker --> D1 index --> Hono API --> React app
+```
+
+- `src/`: React app (Vite + React Router)
+- `functions/`: Hono API (reads, link cards, image proxy, admin and reports)
+- `ingest/`: cron Worker that copies new `pub.workbench.*` records from Jetstream into D1
+- `shared/`, `lexicons/`, `migrations/`: record schemas and validation, D1 schema
+- Everything runs on the Cloudflare free tier.
+
+## Run it locally
+
+```bash
+npm install
+npm test          # all tests (node, Workers/D1, jsdom)
+npm run dev       # Vite dev server; /api is proxied to wrangler on 8787
+```
+
+Copy `.dev.vars.example` to `.dev.vars` and set `ADMIN_TOKEN` before running the API locally.
+The full design is in `docs/superpowers/specs/` and the build plan is in `docs/superpowers/plans/`.
+
+## Developer notes
+
+### Deployment target: Workers with static assets (not Pages)
 
 Cloudflare's Pages overview currently says "Start new projects with Workers." The compatibility matrix
 also shows Cron Triggers and the broader feature set only on Workers, with D1 supported on both. So the
