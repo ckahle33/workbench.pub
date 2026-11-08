@@ -254,35 +254,47 @@ function paginate<T extends { indexedAt: number; uri: string }>(rows: T[], limit
   return { items, cursor: rows.length > limit && last ? encodeCursor(last) : null };
 }
 
-/** Global recent updates, or (with `followingDid`) those of followed projects and topics. */
+/** Max update-index rows examined per feed request, regardless of `limit`. */
+export const FEED_SCAN_WINDOW = 200;
+
+/**
+ * Global recent updates, or (with `followingDid`) those of followed projects and topics.
+ *
+ * Rows read per request are bounded: at most FEED_SCAN_WINDOW rows of the partial
+ * update index are examined (keyset seek), each joined to its project by primary key.
+ * Rows whose project is missing, hidden or not followed are skipped, so a page may
+ * hold fewer than `limit` items; the cursor then points at the last row *scanned*
+ * and the client simply continues.
+ */
 export async function listFeed(
   db: D1Database,
   opts: { followingDid?: string; cursor?: ListCursor; limit: number },
 ): Promise<Page<FeedItem>> {
-  const where = ['u.hidden = 0', 'p.hidden = 0'];
-  const binds: unknown[] = [];
-  if (opts.followingDid) {
-    where.push(
-      `(p.uri IN (SELECT subject_uri FROM follows WHERE did = ? AND hidden = 0)
+  const seek = opts.cursor ? 'AND (indexed_at, uri) < (?, ?)' : '';
+  const followed = opts.followingDid
+    ? `AND (p.uri IN (SELECT subject_uri FROM follows WHERE did = ? AND hidden = 0)
         OR p.topic_slug IN (SELECT t.slug FROM follows f JOIN topics t ON t.uri = f.subject_uri
-                            WHERE f.did = ? AND f.hidden = 0 AND t.hidden = 0))`,
-    );
-    binds.push(opts.followingDid, opts.followingDid);
-  }
-  if (opts.cursor) {
-    where.push('(u.indexed_at < ? OR (u.indexed_at = ? AND u.uri < ?))');
-    binds.push(opts.cursor.indexedAt, opts.cursor.indexedAt, opts.cursor.uri);
-  }
+                            WHERE f.did = ? AND f.hidden = 0 AND t.hidden = 0))`
+    : '';
+  // Placeholder order in the SQL: follow filter (SELECT list) first, then the seek.
+  const binds: unknown[] = [
+    ...(opts.followingDid ? [opts.followingDid, opts.followingDid] : []),
+    ...(opts.cursor ? [opts.cursor.indexedAt, opts.cursor.uri] : []),
+  ];
+  // Outer LEFT JOIN so the JS side sees every scanned row (needed for the cursor).
   const { results } = await db
     .prepare(
-      `SELECT u.*, p.did AS p_did, p.rkey AS p_rkey, p.title AS p_title, p.topic_slug AS p_topic
-       FROM updates u JOIN projects p ON p.uri = u.project_uri
-       WHERE ${where.join(' AND ')}
-       ORDER BY u.indexed_at DESC, u.uri DESC LIMIT ?`,
+      `SELECT w.*, p.did AS p_did, p.rkey AS p_rkey, p.title AS p_title, p.topic_slug AS p_topic,
+              (p.uri IS NOT NULL AND p.hidden = 0 ${followed}) AS visible
+       FROM (SELECT * FROM updates WHERE hidden = 0 ${seek}
+             ORDER BY indexed_at DESC, uri DESC LIMIT ${FEED_SCAN_WINDOW}) w
+       LEFT JOIN projects p ON p.uri = w.project_uri
+       ORDER BY w.indexed_at DESC, w.uri DESC`,
     )
-    .bind(...binds, opts.limit + 1)
+    .bind(...binds)
     .all<Row>();
-  const rows = results.map(
+  const visible = results.filter((r) => r.visible === 1);
+  const items = visible.slice(0, opts.limit).map(
     (r): FeedItem => ({
       ...toUpdate(r),
       project: {
@@ -294,14 +306,23 @@ export async function listFeed(
       },
     }),
   );
-  return paginate(rows, opts.limit);
+  if (visible.length > opts.limit) return { items, cursor: encodeCursor(items[items.length - 1]) };
+  const lastScanned = results[results.length - 1];
+  const cursor =
+    results.length === FEED_SCAN_WINDOW
+      ? encodeCursor({ indexedAt: lastScanned.indexed_at as number, uri: lastScanned.uri as string })
+      : null;
+  return { items, cursor };
 }
 
-export async function listTopics(db: D1Database): Promise<TopicRow[]> {
+/** Topics in slug order; the cursor is the last slug returned. */
+export async function listTopics(db: D1Database, afterSlug: string | undefined, limit: number): Promise<Page<TopicRow>> {
   const { results } = await db
-    .prepare('SELECT * FROM topics WHERE hidden = 0 ORDER BY name COLLATE NOCASE, slug')
+    .prepare('SELECT * FROM topics WHERE hidden = 0 AND slug > ? ORDER BY slug LIMIT ?')
+    .bind(afterSlug ?? '', limit + 1)
     .all<Row>();
-  return results.map(toTopic);
+  const items = results.slice(0, limit).map(toTopic);
+  return { items, cursor: results.length > limit ? items[items.length - 1].slug : null };
 }
 
 const toTopic = (r: Row): TopicRow => ({
@@ -325,14 +346,13 @@ async function listProjects(
   cursor: ListCursor | undefined,
   limit: number,
 ): Promise<Page<ProjectView>> {
+  const seek = cursor ? 'AND (indexed_at, uri) < (?, ?)' : '';
   const { results } = await db
     .prepare(
-      `SELECT * FROM projects
-       WHERE ${column} = ?1 AND hidden = 0
-         AND (?2 IS NULL OR indexed_at < ?2 OR (indexed_at = ?2 AND uri < ?3))
-       ORDER BY indexed_at DESC, uri DESC LIMIT ?4`,
+      `SELECT * FROM projects WHERE ${column} = ? AND hidden = 0 ${seek}
+       ORDER BY indexed_at DESC, uri DESC LIMIT ?`,
     )
-    .bind(value, cursor?.indexedAt ?? null, cursor?.uri ?? '', limit + 1)
+    .bind(...(cursor ? [value, cursor.indexedAt, cursor.uri, limit + 1] : [value, limit + 1]))
     .all<Row>();
   return paginate(results.map(toProject), limit);
 }

@@ -62,11 +62,11 @@ export function readRoutes(opts: ReadOptions = {}): Hono<{ Bindings: Env }> {
   const fetchFn = opts.fetchFn ?? ((input, init) => fetch(input, init));
 
   /** Parses `limit` and `cursor`; a bad cursor is a client error. */
-  const paging = (q: (k: string) => string | undefined): { limit: number; cursor?: ListCursor } | null => {
+  const paging = (q: (k: string) => string | undefined, keyset = true): { limit: number; cursor?: ListCursor } | null => {
     const n = Number(q('limit') ?? DEFAULT_LIMIT);
     const limit = Number.isFinite(n) ? Math.min(Math.max(Math.trunc(n), 1), MAX_LIMIT) : DEFAULT_LIMIT;
     const raw = q('cursor');
-    if (!raw) return { limit };
+    if (!raw || !keyset) return { limit };
     const cursor = decodeCursor(raw);
     return cursor ? { limit, cursor } : null;
   };
@@ -77,7 +77,10 @@ export function readRoutes(opts: ReadOptions = {}): Hono<{ Bindings: Env }> {
     return c.json(await listFeed(c.env.DB, { ...page, followingDid: c.req.query('following') || undefined }));
   });
 
-  app.get('/topics', async (c) => c.json({ items: await listTopics(c.env.DB), cursor: null }));
+  app.get('/topics', async (c) => {
+    const page = paging((k) => c.req.query(k), false);
+    return c.json(await listTopics(c.env.DB, c.req.query('cursor') || undefined, page!.limit));
+  });
 
   app.get('/topics/:slug', async (c) => {
     const page = paging((k) => c.req.query(k));

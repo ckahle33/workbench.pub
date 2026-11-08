@@ -1,6 +1,6 @@
 import { env } from 'cloudflare:test';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { hideUri, upsertFollow, upsertProject, upsertReply, upsertTopic, upsertUpdate } from '../../shared/db';
+import { FEED_SCAN_WINDOW, hideUri, upsertFollow, upsertProject, upsertReply, upsertTopic, upsertUpdate } from '../../shared/db';
 import app from '../index';
 import { readRoutes } from './read';
 
@@ -121,7 +121,51 @@ describe('feed', () => {
   });
 });
 
+describe('feed scan bound', () => {
+  it('returns a continuing cursor when the head of the index is all orphans', async () => {
+    await seedProject(P1);
+    await seedUpdate(P1, 'visible', 100);
+    const ghost = `at://${ALICE}/pub.workbench.project/ghost`;
+    const stmts = [];
+    for (let i = 0; i < FEED_SCAN_WINDOW + 5; i++) {
+      stmts.push(db.prepare(
+        `INSERT INTO updates (uri, did, rkey, project_uri, heading, body, created_at, indexed_at)
+         VALUES (?, ?, ?, ?, 'h', 'b', 'x', ?)`,
+      ).bind(updUri(`o${i}`), ALICE, `o${i}`, ghost, 1000 + i));
+    }
+    await db.batch(stmts);
+    const seen: string[] = [];
+    let cursor: string | null = null;
+    let pages = 0;
+    do {
+      const res = await get(`/api/feed?limit=5${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`);
+      const body = (await res.json()) as { items: { rkey: string }[]; cursor: string | null };
+      if (pages === 0) {
+        expect(body.items).toEqual([]);
+        expect(body.cursor).not.toBeNull();
+      }
+      seen.push(...body.items.map((i) => i.rkey));
+      cursor = body.cursor;
+      pages++;
+    } while (cursor && pages < 10);
+    expect(seen).toEqual(['visible']);
+    expect(pages).toBe(2);
+  });
+});
+
 describe('topics', () => {
+  it('paginates the topic list by slug', async () => {
+    for (const slug of ['b-topic', 'c-topic', 'a-topic']) {
+      await upsertTopic(db, { slug, name: slug, description: '', uri: `at://${ALICE}/pub.workbench.topic/${slug}`, ownerDid: ALICE, indexedAt: 2 });
+    }
+    const p1 = (await (await get('/api/topics?limit=2')).json()) as { items: { slug: string }[]; cursor: string | null };
+    expect(p1.items.map((t) => t.slug)).toEqual(['a-topic', 'b-topic']);
+    expect(p1.cursor).toBe('b-topic');
+    const p2 = (await (await get(`/api/topics?limit=2&cursor=${p1.cursor}`)).json()) as { items: { slug: string }[]; cursor: string | null };
+    expect(p2.items.map((t) => t.slug)).toEqual(['c-topic', 'woodworking']);
+    expect(p2.cursor).toBeNull();
+  });
+
   it('lists topics and returns 404 for an unknown slug', async () => {
     const list = (await (await get('/api/topics')).json()) as { items: { slug: string }[] };
     expect(list.items.map((t) => t.slug)).toEqual(['woodworking']);
