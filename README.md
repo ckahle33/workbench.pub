@@ -134,7 +134,7 @@ Consequence for the ingest Worker: the 50 query limit and the 10 ms CPU limit ar
 1. Open https://workbench.pub in a private window; `/topics/electronics` and a hard refresh on it must load the app.
 2. Sign in with a real account. If the PDS rejects the scopes, see risk 1.
 3. Create a topic and a project; post an update with a photo and a GitHub link.
-4. Wait one cron interval (5 minutes, plus up to 15 minutes the first time for the cron to propagate). Check `npx wrangler tail workbench-ingest --format pretty` for a `jetstream drain` line with `events > 0`.
+4. Wait one cron interval (one minute, plus up to 15 minutes the first time for the cron to propagate). Check `npx wrangler tail workbench-ingest --format pretty` for a `jetstream drain` line with `events > 0`.
 5. In a signed-out window the project, update and photo appear.
 6. Report and admin (use an environment variable so the token never appears in shell history files via a literal; `read -s` keeps it off the screen):
 
@@ -227,11 +227,13 @@ No `jwks`: that is only for confidential clients.
 (built in `buildLoopbackClientId`). Open the dev server via `http://127.0.0.1:<port>/`; the library redirects `localhost` there.
 Any non-loopback origin other than workbench.pub (previews) will fail the redirect check.
 
-Query budget: Workers Free allows 50 D1 queries per invocation (a `db.batch` counts as 1). A run spends 2 on the
-cursor and about 3 per event that reaches D1, so `MAX_EVENTS_PER_RUN = 15` (15 x 3 + 2 = 47) caps each run; when hit,
-the cursor is saved at the last processed event, the log shows `capped`, and the next run continues. Events that never
-touch D1 (foreign collections, identity/account) and replayed events older than the saved cursor are free; the event
-exactly at the cursor is re-applied each run (idempotent) and counts against the budget, as does its rate-limit bump.
-The every-minute cron therefore drains at most about 21,600 events per day. A failed cursor save is logged and reported
-as `errored` rather than thrown. The Free-plan 10 ms CPU limit for cron invocations is untested: whether 15 events fit
-is unknown until a deploy smoke test (watch `wrangler tail`).
+Query budget: Workers Free allows 50 D1 queries per invocation (a `db.batch` counts as 1), so the drain budgets by
+queries, not events. `ingest/src/queryBudget.ts` counts every query; before each event the drain requires
+`used + 3 (worst-case applyEvent) + 1 (setCursor reserve) <= 50`, otherwise it stops, saves the cursor at the last
+handled event and reports `capped` so the next run continues. Real costs: foreign, identity and replay-skipped events 0,
+a blocked DID 1, a rejected record 2, a normal event 3. With all-normal events a run fits (50 - 1 getCursor - 1 setCursor) / 3
+= 16 events; the first is the event at the saved cursor, which a capped run re-applies (idempotent) because
+only events strictly below the cursor are skipped, so a capped run nets about 15 new events (16 on a fresh cursor), which
+is roughly 21,600 per day at one run a minute (cheaper events raise it). A failed cursor save is logged and reported as
+`errored` rather than thrown. The Free-plan 10 ms CPU limit for cron invocations is untested: whether 16 events fit is
+unknown until a deploy smoke test (watch `wrangler tail`).

@@ -1,7 +1,8 @@
 import { env } from 'cloudflare:test';
-import { beforeEach, describe, expect, it } from 'vitest';
-import { getCursor, setCursor } from '../../shared/db';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { blockDid, getCursor, setCursor } from '../../shared/db';
 import { drainJetstream, type SocketLike } from './drain';
+import { countQueries } from './queryBudget';
 
 const db = (env as unknown as { DB: D1Database }).DB;
 const ENDPOINT = 'wss://example.test/subscribe';
@@ -203,28 +204,8 @@ describe('drainJetstream', () => {
 
 /** Mimics the platform: counts queries and throws once more than `limit` have been issued. */
 function limited(real: D1Database, limit: number) {
-  const state = { count: 0, max: 0 };
-  const realOf = new WeakMap<object, D1PreparedStatement>();
-  const spend = () => {
-    if (++state.count > limit) throw new Error('Too many API requests by single Worker invocation.');
-  };
-  const wrap = (st: D1PreparedStatement): D1PreparedStatement => {
-    const w = {
-      bind: (...a: unknown[]) => wrap(st.bind(...a)),
-      run: () => (spend(), st.run()),
-      first: (c?: string) => (spend(), st.first(c as never)),
-      all: () => (spend(), st.all()),
-      raw: () => (spend(), st.raw()),
-    } as unknown as D1PreparedStatement;
-    realOf.set(w, st);
-    return w;
-  };
-  const db = {
-    prepare: (sql: string) => wrap(real.prepare(sql)),
-    batch: (sts: D1PreparedStatement[]) => (spend(), real.batch(sts.map((x) => realOf.get(x) ?? x))),
-    exec: (sql: string) => (spend(), real.exec(sql)),
-  } as unknown as D1Database;
-  return { db, state };
+  const c = countQueries(real, limit);
+  return { db: c.db, state: { get count() { return c.used(); } } };
 }
 
 /** A Jetstream stand-in: replays every event with time_us >= the cursor in the url, like the real thing. */
@@ -309,9 +290,61 @@ describe('drainJetstream query budget', () => {
       },
     });
     const h = harness([(s) => s.send(identity(5))]);
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const r = await drainWith(failing, h.connect);
+    expect(spy).toHaveBeenCalledWith('jetstream cursor save failed', 'Error');
+    spy.mockRestore();
     expect(r.errored).toBe(true);
     expect(r.cursor).toBeNull();
     expect(await getCursor(db)).toBeNull();
+  });
+
+  it('a blocked-DID flood spends 1 query per event, never breaks the limit, and the cursor still advances', async () => {
+    const SPAM = 'did:plc:spam';
+    await blockDid(db, SPAM);
+    const spam = Array.from({ length: 60 }, (_, i) => ({ ...project(10_000_000 + i * 1_000_000, `s${i}`), did: SPAM }));
+    const real = [0, 1, 2].map((i) => project(70_000_000 + i * 1_000_000, `r${i}`));
+    const feedAll = feed([...spam, ...real]);
+    const caps: boolean[] = [];
+    const cursors: Array<number | null> = [];
+    for (let run = 0; run < 5; run++) {
+      const { db: counted, state } = limited(db, 50);
+      const r = await drainWith(counted, harness([feedAll]).connect);
+      expect(r.errored).toBe(false);
+      expect(state.count).toBeLessThanOrEqual(50);
+      caps.push(r.capped);
+      cursors.push(await getCursor(db));
+      if (!r.capped) break;
+    }
+    expect(caps[0]).toBe(true);
+    expect(caps.at(-1)).toBe(false);
+    expect(cursors[0]).toBeGreaterThan(10_000_000);
+    expect(cursors[0]).toBeLessThan(cursors[1]!);
+    expect((await db.prepare('SELECT COUNT(*) AS n FROM projects').first<{ n: number }>())?.n).toBe(3);
+  });
+
+  it('exact boundary: 16 normal events use exactly 50 queries and are not capped; 17 are capped after 16', async () => {
+    const mk = (n: number) => Array.from({ length: n }, (_, i) => project(10_000_000 + i * 1_000_000, `b${i}`));
+    {
+      const { db: counted, state } = limited(db, 50);
+      const r = await drainWith(counted, harness([feed(mk(16))]).connect);
+      expect(r).toMatchObject({ events: 16, capped: false, errored: false });
+      expect(state.count).toBe(50);
+    }
+    for (const t of ['projects', 'cursor', 'ingest_counts']) await db.prepare(`DELETE FROM ${t}`).run();
+    {
+      const { db: counted, state } = limited(db, 50);
+      const r = await drainWith(counted, harness([feed(mk(17))]).connect);
+      expect(r).toMatchObject({ events: 16, capped: true, errored: false });
+      expect(state.count).toBe(50);
+      expect((await db.prepare('SELECT COUNT(*) AS n FROM projects').first<{ n: number }>())?.n).toBe(16);
+    }
+  });
+
+  it('countQueries counts without throwing when no limit is set', async () => {
+    const c = countQueries(db);
+    for (let i = 0; i < 60; i++) await c.db.prepare('SELECT 1').first();
+    await c.db.batch([c.db.prepare('SELECT 1'), c.db.prepare('SELECT 2')]);
+    expect(c.used()).toBe(61);
   });
 });
