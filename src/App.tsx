@@ -1,5 +1,7 @@
 import { Link, NavLink, Route, Routes } from 'react-router-dom';
 import { useSession } from './auth/SessionContext';
+import { SiteFooter } from './components/SiteFooter';
+import { About } from './pages/About';
 import { NewProject } from './pages/NewProject';
 import { NewUpdate } from './pages/NewUpdate';
 import { Home } from './pages/Home';
@@ -37,6 +39,7 @@ function SiteHeader() {
           <NavLink to="/" end>
             Latest
           </NavLink>
+          <NavLink to="/about">About</NavLink>
           {!loading && session && (
             <NavLink to="/new" className="btn btn-primary">
               New project
@@ -78,10 +81,12 @@ export function App() {
           <Route path="/new" element={<NewProject />} />
           <Route path="/u/:did/:rkey" element={<Update />} />
           <Route path="/profile/:did" element={<Profile />} />
+          <Route path="/about" element={<About />} />
           <Route path="/signin" element={<SignIn />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </main>
+      <SiteFooter />
     </>
   );
 }

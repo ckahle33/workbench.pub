@@ -37,3 +37,47 @@
 .not-found h1 { font-size: clamp(96px, 24vw, 280px); line-height: 0.82; letter-spacing: -0.06em; }
 .not-found p { margin-top: 24px; font-size: 21px; }
 .not-found .actions { margin-top: 32px; }
+
+/* About page: a sequence of numbered steps (big numerals are earned here), plain sections. */
+.about { max-width: 760px; }
+.about h1 { font-size: clamp(64px, 14vw, 160px); line-height: 0.86; letter-spacing: -0.055em; }
+.about .about-lede { margin-top: var(--s-3); font-size: clamp(22px, 3.2vw, 32px); line-height: 1.2; letter-spacing: -0.02em; max-width: 30ch; }
+.about section { margin-top: var(--s-6); border-top: var(--rule); padding-top: 14px; }
+.about section > h2 { margin-bottom: var(--s-3); }
+.about section > h3 { margin-top: var(--s-3); }
+.about p { max-width: 62ch; margin-top: var(--s-1); font-size: 18px; line-height: 1.5; }
+.about section > p:first-of-type { margin-top: 0; }
+.about-list { margin: var(--s-1) 0 0 1.25rem; font-size: 18px; line-height: 1.5; max-width: 62ch; }
+.about-list li { margin-top: 6px; }
+.about-steps { list-style: none; counter-reset: step; }
+.about-steps > li { counter-increment: step; display: grid; grid-template-columns: 72px 1fr; column-gap: var(--s-2); padding: var(--s-2) 0; border-top: var(--rule-hair); }
+.about-steps > li:first-child { border-top: 0; padding-top: 0; }
+.about-steps > li::before {
+  content: counter(step, decimal-leading-zero);
+  grid-row: span 2;
+  font-size: 56px;
+  font-weight: 800;
+  letter-spacing: -0.05em;
+  line-height: 0.9;
+  font-variant-numeric: tabular-nums;
+}
+.about-steps > li:first-child::before { color: var(--accent); }
+.about-steps h3 { margin: 0; }
+.about-steps p { margin-top: 4px; }
+.about-actions { margin-top: var(--s-6); }
+@media (max-width: 480px) {
+  .about-steps > li { grid-template-columns: 52px 1fr; }
+  .about-steps > li::before { font-size: 36px; }
+}
+
+/* Signed-out intro above the feed. */
+.intro { border: var(--rule-thin); padding: var(--s-3); margin-bottom: var(--s-4); }
+.intro h2 { font-size: clamp(26px, 4vw, 36px); letter-spacing: -0.035em; }
+.intro p { margin-top: var(--s-1); max-width: 56ch; font-size: 17px; }
+.intro .actions { margin-top: var(--s-2); display: flex; flex-wrap: wrap; gap: var(--s-1) var(--s-2); }
+
+/* Footer */
+.site-footer { border-top: var(--rule); }
+.site-footer-inner { max-width: var(--max); margin: 0 auto; padding: var(--s-2) var(--gutter); display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0 var(--s-3); }
+.site-footer nav { display: flex; flex-wrap: wrap; gap: 0 var(--s-3); }
+.site-footer a { display: inline-flex; align-items: center; min-height: 44px; font-size: 15px; font-weight: 500; }

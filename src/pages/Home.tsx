@@ -60,6 +60,20 @@ export function Home() {
             </div>
           )}
         </div>
+        {!loading && !session && (
+          <section className="intro" aria-labelledby="intro-h">
+            <h2 id="intro-h">Show a project as it gets made.</h2>
+            <p>Post dated updates with photos and notes. Your work is saved in your own Bluesky account, and anyone can follow along.</p>
+            <div className="actions">
+              <Link to="/about" className="btn btn-primary">
+                How it works
+              </Link>
+              <Link to="/signin" className="btn">
+                Sign in
+              </Link>
+            </div>
+          </section>
+        )}
         <section aria-labelledby="feed-h" className="feed">
           <h2 id="feed-h" className="visually-hidden">
             {view === 'following' ? 'Following' : 'Everyone'}
