@@ -168,17 +168,28 @@ const validators: { [C in Collection]: (o: Obj) => void } = {
   },
 };
 
+const KNOWN_KEYS: { [C in Collection]: string[] } = {
+  'pub.workbench.topic': ['$type', 'name', 'slug', 'description', 'createdAt'],
+  'pub.workbench.project': ['$type', 'title', 'summary', 'topic', 'status', 'cover', 'createdAt'],
+  'pub.workbench.update': ['$type', 'project', 'heading', 'body', 'images', 'links', 'parts', 'createdAt'],
+  'pub.workbench.reply': ['$type', 'subject', 'body', 'createdAt'],
+  'pub.workbench.follow': ['$type', 'subject', 'createdAt'],
+};
+
 export function validateRecord<C extends Collection>(
   collection: C,
   record: unknown,
 ): ValidationResult<RecordByCollection[C]> {
+  if (!Object.hasOwn(validators, collection)) return { ok: false, reason: `unknown collection ${String(collection)}` };
   try {
     const o = obj(record, 'record');
+    for (const key of Object.keys(o)) {
+      if (!KNOWN_KEYS[collection].includes(key)) fail(`unknown field ${key.slice(0, 40)}`);
+    }
     if (o.$type !== collection) fail(`$type must be ${collection}`);
     validators[collection](o);
     return { ok: true, value: o as unknown as RecordByCollection[C] };
   } catch (e) {
-    if (e instanceof Invalid) return { ok: false, reason: e.message };
-    throw e;
+    return { ok: false, reason: e instanceof Invalid ? e.message : 'invalid record' };
   }
 }

@@ -90,6 +90,45 @@ describe('validateRecord', () => {
   });
 });
 
+describe('validateRecord with hostile input', () => {
+  const upd = valid['pub.workbench.update'];
+  const rejects = (c: Collection, r: unknown) => {
+    let res: ReturnType<typeof validateRecord> | undefined;
+    expect(() => (res = validateRecord(c, r))).not.toThrow();
+    expect(res?.ok).toBe(false);
+  };
+  it('rejects arrays and strings as records', () => {
+    rejects('pub.workbench.follow', []);
+    rejects('pub.workbench.follow', 'pub.workbench.follow');
+  });
+  it('rejects a numeric title', () => {
+    rejects('pub.workbench.project', { ...valid['pub.workbench.project'], title: 5 });
+  });
+  it('rejects non-array images', () => {
+    rejects('pub.workbench.update', { ...upd, images: 'x' });
+    rejects('pub.workbench.update', { ...upd, images: {} });
+  });
+  it('rejects an own __proto__ key', () => {
+    const r = JSON.parse(`{"__proto__":{},"$type":"pub.workbench.follow","subject":"${projectUri}","createdAt":"${now}"}`);
+    rejects('pub.workbench.follow', r);
+    rejects('pub.workbench.follow', JSON.parse('{"__proto__":{}}'));
+  });
+  it('rejects a multi-megabyte string', () => {
+    rejects('pub.workbench.update', { ...upd, heading: 'a'.repeat(5_000_000) });
+  });
+  it('rejects a huge unknown field', () => {
+    rejects('pub.workbench.follow', { ...valid['pub.workbench.follow'], extra: 'a'.repeat(5_000_000) });
+  });
+  it('rejects unknown collections without throwing', () => {
+    rejects('pub.workbench.nope' as Collection, { $type: 'pub.workbench.nope' });
+    rejects('toString' as Collection, { $type: 'toString' });
+  });
+  it('returns ok:false instead of throwing when reading the record throws', () => {
+    const r = { get $type(): string { throw new Error('boom'); } };
+    rejects('pub.workbench.follow', r);
+  });
+});
+
 describe('normalizeSlug', () => {
   it.each(['Electronics', ' electronics ', 'ｅｌｅｃｔｒｏｎｉｃｓ'])('normalizes %j', (input) => {
     expect(normalizeSlug(input)).toBe('electronics');
