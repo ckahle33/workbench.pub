@@ -1,7 +1,8 @@
 import { Agent } from '@atproto/api';
 import { validateRecord } from '../../shared/lexicons';
 import type { Session } from '../auth/oauth';
-import { createReply, createUpdate } from './write';
+import { failureMessage } from './errors';
+import { createReply, createUpdate, deleteRecord } from './write';
 
 const DID = 'did:plc:abcdefghijklmnopqrstuvwx';
 const PROJECT = `at://${DID}/pub.workbench.project/abc`;
@@ -107,5 +108,34 @@ describe('createUpdate against a fake PDS through the real agent', () => {
   it('tells the person a write may have succeeded when the reply is unreadable and has no uri', async () => {
     const { session } = pds({ createStatus: 200, createBody: { nope: 1 } });
     await expect(createReply(session, { subject: PROJECT, body: 'x' })).rejects.toMatchObject({ stage: 'create', maybeSaved: true });
+  });
+
+  it('does not trust a recovered uri from another repo or collection', async () => {
+    const other = pds({ createStatus: 200, createBody: { uri: 'at://did:plc:someoneelse/pub.workbench.reply/3k1', cid: 'x' } });
+    await expect(createReply(other.session, { subject: PROJECT, body: 'x' })).rejects.toMatchObject({ stage: 'create', maybeSaved: true });
+    const wrongColl = pds({ createStatus: 200, createBody: { uri: `at://${DID}/app.bsky.feed.post/3k1`, cid: 'x' } });
+    await expect(createReply(wrongColl.session, { subject: PROJECT, body: 'x' })).rejects.toMatchObject({ maybeSaved: true });
+  });
+
+  it('flags a malformed 2xx body (error InvalidResponse) as maybe saved at create', async () => {
+    const { session } = pds({ createStatus: 200, createBody: 'not json at all' });
+    await expect(createReply(session, { subject: PROJECT, body: 'x' })).rejects.toMatchObject({ stage: 'create', maybeSaved: true });
+  });
+
+  it('never tells people an unreadable upload reply may have been posted', async () => {
+    const seen: string[] = [];
+    const agent = new Agent(async () => new Response('garbage', { status: 200, headers: { 'content-type': 'text/plain' } }));
+    const session = { did: DID, handle: 'me.test', agent } as unknown as Session;
+    const err = await createUpdate(session, { project: PROJECT, heading: 'h', body: 'b', images: [{ file: jpeg(), alt: 'a' }], links: [] }).catch((e) => e);
+    seen.push(err.stage);
+    expect(err.stage).toBe('upload');
+    expect(err.maybeSaved).toBeUndefined();
+    expect(failureMessage('post', err)).not.toMatch(/may have been saved/);
+  });
+
+  it('tags a failed delete with the delete stage', async () => {
+    const { session } = pds({ createStatus: 500 });
+    const agent = new Agent(async () => new Response(JSON.stringify({ error: 'InternalServerError' }), { status: 500, headers: { 'content-type': 'application/json' } }));
+    await expect(deleteRecord({ ...session, agent } as Session, `at://${DID}/pub.workbench.reply/3k1`)).rejects.toMatchObject({ stage: 'delete', status: 500 });
   });
 });

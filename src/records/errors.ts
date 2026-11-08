@@ -1,5 +1,5 @@
 /** Where in a write a failure happened. */
-export type Stage = 'validate' | 'upload' | 'create' | 'after-write';
+export type Stage = 'validate' | 'upload' | 'create' | 'delete' | 'after-write';
 
 export interface FailureInfo {
   stage: Stage;
@@ -45,7 +45,8 @@ export function describeThrown(e: unknown): Omit<FailureInfo, 'stage'> {
   if (typeof e !== 'object' || e === null) return {};
   const o = e as { status?: unknown; error?: unknown; name?: unknown; message?: unknown; responseBody?: unknown };
   const status = typeof o.status === 'number' ? o.status : undefined;
-  const isInvalidResponse = o.name === 'XRPCInvalidResponseError' || o.error === 'Invalid Response';
+  // A 2xx reply that could not be read: 'Invalid Response' (schema check) or 'InvalidResponse' (malformed body).
+  const isInvalidResponse = o.name === 'XRPCInvalidResponseError' || o.error === 'Invalid Response' || o.error === 'InvalidResponse';
   const errorName =
     typeof o.error === 'string' && o.error
       ? sanitize(o.error.replace(/\s+/g, ''), 60)
@@ -75,7 +76,8 @@ const SCOPE_NAMES = /^(ScopeMissing|InsufficientScope|InvalidScope|Forbidden)$/i
 /** What the person can do about it, in plain language. */
 export function recoveryHint(i: FailureInfo): string {
   const name = i.errorName ?? '';
-  if (i.maybeSaved) return 'It may have been saved. Check before trying again, so you do not post it twice.';
+  // Only creating can have produced a record; an unreadable upload or delete reply is safe to retry.
+  if (i.maybeSaved && i.stage === 'create') return 'It may have been saved. Check before trying again, so you do not post it twice.';
   if (i.status === 1 || name === 'NetworkError') return 'Check your internet connection and try again.';
   if (i.status === 429 || /RateLimit/i.test(name)) return 'You are doing this too often. Wait a few minutes and try again.';
   if (SCOPE_NAMES.test(name) || i.status === 403) return 'workbench.pub was not given permission to do this. Sign out, then sign in again and accept the permissions.';

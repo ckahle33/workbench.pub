@@ -29,9 +29,16 @@ function checked<C extends Collection>(collection: C, record: unknown): RecordBy
 
 /** Builds a WriteError and logs it once. For thrown remote failures pass the cause. */
 function fail(message: string, stage: Stage, cause?: unknown): WriteError {
-  const info = { stage, ...(cause === undefined ? {} : describeThrown(cause)) };
+  const described = cause === undefined ? {} : describeThrown(cause);
+  const info = { stage, ...described, maybeSaved: stage === 'create' ? described.maybeSaved : undefined };
   logFailure(info);
   return new WriteError(message, info);
+}
+
+/** A uri recovered from an unreadable reply is trusted only if it names our own repo and this collection. */
+function isOwnRecord(uri: string, did: string, collection: string): boolean {
+  const m = /^at:\/\/([^/]+)\/([^/]+)\/[^/]+$/.exec(uri);
+  return !!m && m[1] === did && m[2] === collection;
 }
 
 async function put(s: Session, collection: Collection, record: object): Promise<string> {
@@ -41,7 +48,7 @@ async function put(s: Session, collection: Collection, record: object): Promise<
   } catch (e) {
     // The server answered 2xx but the reply failed validation: the record exists, so use its uri.
     const body = (e as { responseBody?: { uri?: unknown } } | null)?.responseBody;
-    if (describeThrown(e).maybeSaved && typeof body?.uri === 'string' && body.uri.startsWith('at://')) return body.uri;
+    if (describeThrown(e).maybeSaved && typeof body?.uri === 'string' && isOwnRecord(body.uri, s.did, collection)) return body.uri;
     throw fail('Could not save to your PDS. Please try again.', 'create', e);
   }
 }
@@ -177,6 +184,6 @@ export async function deleteRecord(s: Session, uri: string): Promise<void> {
   try {
     await s.agent.com.atproto.repo.deleteRecord({ repo, collection, rkey });
   } catch (e) {
-    throw fail('Could not delete the record. Please try again.', 'create', e);
+    throw fail('Could not delete the record. Please try again.', 'delete', e);
   }
 }
