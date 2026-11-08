@@ -9,12 +9,23 @@ const DEFAULT_TEXT: Record<Kind, string> = {
   notfound: 'Not found.',
 };
 
-/** Loading, error, empty and not-found messages. Errors are announced to screen readers. */
-export function Status({ kind, children }: { kind: Kind; children?: ReactNode }) {
-  const role = kind === 'error' ? 'alert' : kind === 'loading' ? 'status' : undefined;
+/**
+ * Loading, error, empty and not-found messages. Errors are announced to screen readers. Empty and
+ * not-found states sit in a box, with the next action (`action`) beside the sentence.
+ */
+export function Status({ kind, children, action }: { kind: Kind; children?: ReactNode; action?: ReactNode }) {
+  const text = children ?? DEFAULT_TEXT[kind];
+  if (kind === 'empty' || kind === 'notfound') {
+    return (
+      <div className={`status status-${kind} state-panel`}>
+        <p>{text}</p>
+        {action}
+      </div>
+    );
+  }
   return (
-    <p className={`status status-${kind}`} role={role}>
-      {children ?? DEFAULT_TEXT[kind]}
+    <p className={`status status-${kind} ${kind === 'error' ? 'state-error' : 'state-loading'}`} role={kind === 'error' ? 'alert' : 'status'}>
+      {text}
     </p>
   );
 }

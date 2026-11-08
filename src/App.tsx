@@ -1,4 +1,4 @@
-import { Link, Route, Routes } from 'react-router-dom';
+import { Link, NavLink, Route, Routes } from 'react-router-dom';
 import { useSession } from './auth/SessionContext';
 import { NewProject } from './pages/NewProject';
 import { NewUpdate } from './pages/NewUpdate';
@@ -12,29 +12,52 @@ import { useTitle } from './hooks';
 
 function NotFound() {
   useTitle('Page not found');
-  return <p className="status">Page not found.</p>;
+  return (
+    <section className="not-found" aria-labelledby="nf-h">
+      <h1 id="nf-h">404</h1>
+      <p>Page not found. The address may be wrong, or the page was removed.</p>
+      <div className="actions">
+        <Link to="/" className="btn btn-primary">
+          Go to the latest updates
+        </Link>
+      </div>
+    </section>
+  );
 }
 
 function SiteHeader() {
   const { session, loading, signOut } = useSession();
   return (
     <header className="site-header">
-      <Link to="/" className="site-name">
-        workbench.pub
-      </Link>
-      <nav aria-label="Main">
-        {loading ? null : session ? (
-          <>
-            <Link to="/new">New project</Link>
-            <Link to={`/profile/${session.did}`}>@{session.handle}</Link>
-            <button type="button" onClick={() => void signOut()}>
-              Sign out
-            </button>
-          </>
-        ) : (
-          <Link to="/signin">Sign in</Link>
-        )}
-      </nav>
+      <div className="site-header-inner">
+        <Link to="/" className="wordmark">
+          workbench<span className="dot">.</span>pub
+        </Link>
+        <nav aria-label="Main" className="site-nav">
+          <NavLink to="/" end>
+            Latest
+          </NavLink>
+          {!loading && session && (
+            <NavLink to={`/profile/${session.did}`} dir="auto">
+              @{session.handle}
+            </NavLink>
+          )}
+        </nav>
+        <div className="header-actions">
+          {loading ? null : session ? (
+            <>
+              <button type="button" className="btn-text" onClick={() => void signOut()}>
+                Sign out
+              </button>
+              <NavLink to="/new" className="btn btn-primary">
+                New project
+              </NavLink>
+            </>
+          ) : (
+            <NavLink to="/signin">Sign in</NavLink>
+          )}
+        </div>
+      </div>
     </header>
   );
 }
@@ -46,7 +69,7 @@ export function App() {
         Skip to content
       </a>
       <SiteHeader />
-      <main id="main">
+      <main id="main" className="page">
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/t/:slug" element={<Topic />} />

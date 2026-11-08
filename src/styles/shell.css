@@ -1,0 +1,94 @@
+/* Site header, page column and the shared two-column layouts. */
+
+.skip-link {
+  position: absolute;
+  left: var(--gutter);
+  top: -100px;
+  z-index: 10;
+  padding: 11px 18px;
+  background: var(--ink);
+  color: var(--paper);
+  font-weight: 600;
+  font-size: 14px;
+  text-decoration: none;
+}
+.skip-link:focus { top: 8px; color: var(--paper); }
+
+.site-header { border-bottom: var(--rule); }
+.site-header-inner {
+  max-width: var(--max);
+  margin: 0 auto;
+  padding: 18px var(--gutter);
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  grid-template-areas: 'mark nav actions';
+  align-items: center;
+  column-gap: 40px;
+  row-gap: 8px;
+}
+
+.wordmark {
+  grid-area: mark;
+  font-weight: 800;
+  font-size: 22px;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  text-decoration: none;
+  color: var(--ink);
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  white-space: nowrap;
+}
+.wordmark:hover { color: var(--ink); }
+.wordmark .dot { color: var(--accent); }
+
+.site-nav { grid-area: nav; display: flex; flex-wrap: wrap; align-items: center; gap: 0 28px; min-width: 0; }
+.site-nav a, .header-actions a:not(.btn) {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  font-size: 15px;
+  font-weight: 500;
+  text-decoration: none;
+  text-underline-offset: 6px;
+  text-decoration-thickness: 2px;
+}
+.site-nav a[aria-current='page'], .header-actions a[aria-current='page'] { text-decoration-line: underline; }
+.site-nav a:hover, .header-actions a:not(.btn):hover { text-decoration-line: underline; }
+
+.header-actions { grid-area: actions; display: flex; align-items: center; gap: 20px; }
+.header-actions .btn-primary { white-space: nowrap; }
+
+@media (max-width: 720px) {
+  .site-header-inner {
+    grid-template-columns: 1fr auto;
+    grid-template-areas: 'mark actions' 'nav nav';
+    padding-block: 12px;
+  }
+  .site-nav { border-top: var(--rule-hair); }
+  .header-actions { gap: 14px; }
+}
+
+.page {
+  max-width: var(--max);
+  margin: 0 auto;
+  padding: 56px var(--gutter) 96px;
+}
+@media (max-width: 480px) {
+  .page { padding-top: 32px; padding-bottom: 64px; }
+}
+
+/* Main column plus aside, wrapping to one column (aside under main) on narrow screens. */
+.with-aside { display: flex; flex-wrap: wrap; gap: 48px; }
+.with-aside > .main-col { flex: 999 1 560px; min-width: 0; }
+.with-aside > .side-col { flex: 1 1 300px; min-width: 0; display: flex; flex-direction: column; gap: 32px; }
+
+/* Filter aside first, main column second (feed, topic). */
+.with-filter { display: flex; flex-wrap: wrap; gap: 48px; }
+.with-filter > .filter-col { flex: 1 1 200px; min-width: 0; }
+.with-filter > .main-col { flex: 999 1 640px; min-width: 0; }
+
+/* A ruled block in an aside: 2px rule, mono label, content. */
+.side-block { border-top: var(--rule); padding-top: 14px; }
+.side-block > .label { display: block; margin-bottom: 10px; }
