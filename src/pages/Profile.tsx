@@ -1,8 +1,8 @@
 import { useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { useSession } from '../auth/SessionContext';
 import type { Author, Page, ProjectView } from '../api';
-import { ProjectList } from '../components/ProjectList';
+import { ProjectTable } from '../components/ProjectTable';
 import { LoadMore, Status } from '../components/Status';
 import { usePaged, useTitle } from '../hooks';
 import { asProject, optimistic, useOptimistic } from '../optimistic';
@@ -10,6 +10,9 @@ import { asProject, optimistic, useOptimistic } from '../optimistic';
 interface ProfileResponse extends Page<ProjectView> {
   profile: Author;
 }
+
+/** Names longer than this get the smaller display size (long DIDs, long handles). */
+const LONG_NAME = 22;
 
 export function Profile() {
   const { did = '' } = useParams();
@@ -27,17 +30,73 @@ export function Profile() {
   useTitle(profile ? name : '');
 
   if (list.phase === 'loading') return <Status kind="loading" />;
-  if (list.phase === 'notfound' && !own) return <Status kind="notfound">Profile not found.</Status>;
+  if (list.phase === 'notfound' && !own) {
+    return (
+      <Status kind="notfound" action={<Link to="/" className="btn">See the latest updates</Link>}>
+        Profile not found.
+      </Status>
+    );
+  }
   if (list.phase === 'error' || !profile) return <Status kind="error" />;
 
   const projects = optimistic.mergeWith(list.items, (i) => i.kind === 'project' && i.did === did).map(asProject);
+  const isMe = session?.did === did;
+  // Counts only when the whole list is loaded; a partial count would be wrong.
+  const counts = !list.hasMore && projects.length > 0
+    ? [
+        { label: 'Projects', n: projects.length },
+        { label: 'In progress', n: projects.filter((p) => p.status === 'in-progress').length, accent: true },
+        { label: 'Finished', n: projects.filter((p) => p.status === 'finished').length },
+        { label: 'Paused', n: projects.filter((p) => p.status === 'paused').length },
+      ]
+    : null;
+
   return (
     <>
-      <h1 dir="auto">{name}</h1>
-      {profile.handle && profile.displayName && <p className="meta">@{profile.handle}</p>}
-      <h2 className="visually-hidden">Projects</h2>
-      {projects.length === 0 ? <Status kind="empty">No projects yet.</Status> : <ProjectList projects={projects} />}
-      <LoadMore hasMore={list.hasMore} loading={list.loadingMore} failed={list.moreFailed} onClick={list.loadMore} />
+      <header className="profile-head">
+        <p className="meta-line">
+          <span>Profile</span>
+          {counts && <span className="num">{`${counts[0].n} ${counts[0].n === 1 ? 'project' : 'projects'}`}</span>}
+          {profile.handle && profile.displayName && <span className="as-is" dir="auto">@{profile.handle}</span>}
+        </p>
+        <h1 dir="auto" className={`profile-name${Array.from(name).length > LONG_NAME ? ' is-long' : ''}`}>
+          {name}
+        </h1>
+      </header>
+
+      {counts && (
+        <dl className="count-strip">
+          {counts.map((c) => (
+            <div key={c.label}>
+              <dt>{c.label}</dt>
+              <dd className={c.accent && c.n > 0 ? 'is-accent' : undefined}>{c.n}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+
+      <section aria-labelledby="profile-projects-h" className="section">
+        <h2 id="profile-projects-h" className="section-title">
+          Projects
+        </h2>
+        {projects.length === 0 ? (
+          <Status
+            kind="empty"
+            action={
+              isMe ? (
+                <Link to="/new" className="btn btn-primary">
+                  Start a project
+                </Link>
+              ) : undefined
+            }
+          >
+            No projects yet.
+          </Status>
+        ) : (
+          <ProjectTable projects={projects} showTopic label={`Projects by ${name}`} />
+        )}
+        <LoadMore hasMore={list.hasMore} loading={list.loadingMore} failed={list.moreFailed} onClick={list.loadMore} />
+      </section>
     </>
   );
 }
