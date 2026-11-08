@@ -13,7 +13,7 @@ Derived from the shipped code in `src/styles/` (entry `src/styles.css`). Swiss/I
 | `--hairline` | `#dcdcdc` | 1px rules between list rows, image edges |
 | `--panel` | `#f2f2f2` | missing-photo panel, sub-form, hover fill |
 | `--grey-mid` / `--grey-light` | `#9a9a9a` / `#c7c7c7` | decoration and disabled borders only, never text |
-| `--accent` | `#d0201a` | the one red: newest update numeral, current marker, in-progress status, errors, hover (5.38:1 on white, 4.81:1 on `--panel`) |
+| `--accent` | `#d0201a` | the one red: newest update numeral, the first step's numeral on the About page, current marker, in-progress status, errors, hover (5.38:1 on white, 4.81:1 on `--panel`) |
 
 Spacing scale: `--s-1` 8, `--s-2` 16, `--s-3` 24, `--s-4` 32, `--s-5` 48, `--s-6` 64, `--s-7` 96 px. Headings get more space above than below (section `margin-top: --s-6`, title-to-content `--s-3`; timeline entry `--s-5` above, `--s-4` below). Layout: 1200px column, `--gutter` 24px (16px under 480px).
 
@@ -29,7 +29,8 @@ Rules: `--rule` 2px ink (under header, above sections, asides, lists, form secti
 
 ## Components
 
-- Header: wordmark `workbench.pub` (red dot), nav (Latest, New project black button), right group (profile link, Sign out / Sign in) with `margin-left: auto`; current page underlined 2px, offset 6px.
+- Footer: a 2px rule, the wordmark label at the left, About and GitHub links at the right (`SiteFooter`), on every page.
+- Header: wordmark `workbench.pub` (red dot), nav (Latest, About, New project black button), right group (profile link, Sign out / Sign in) with `margin-left: auto`; current page underlined 2px, offset 6px.
 - Buttons: square. Default = white, 2px ink border, 600 14px, 44px min height. `.btn-primary` = ink fill (hover accent). `.btn-small` 1px border for owner actions. `.btn-text` underlined text button. `.btn-danger` accent border. `[aria-disabled=true]` / `:disabled` = grey border, muted text, `progress` / `not-allowed` cursor, no hover change.
 - Status badge: square, 1px border, 13px/600. In progress = accent; finished = ink; paused = dashed muted.
 - Project page: 12-column head (meta line, title, summary span 7, author + Follow span 5), timeline (`96px | 1fr`, numeral from `updateCount`, newest red), aside of `.side-block`s (FACTS `dl`, PARTS chips, Report).

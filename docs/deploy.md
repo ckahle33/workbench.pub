@@ -4,8 +4,8 @@ The full runbook: free-tier limits, deploy steps, smoke test, rate limiting, log
 
 ## Deploying
 
-Every limit below was read from the official Cloudflare docs on 2026-11-07 unless it says "unknown". Nothing here has been run
-against a real Cloudflare account yet.
+Every limit below was read from the official Cloudflare docs on 2026-11-07 unless it says "unknown". The site is deployed at
+https://workbench.pub (web Worker, ingest cron and D1 are live). Still to be verified live: sign-in against a real account and first posts.
 
 ### Free-tier limits (checked 2026-11-07)
 

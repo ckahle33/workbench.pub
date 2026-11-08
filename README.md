@@ -4,7 +4,7 @@ A social site for makers who show their work as it happens. Post a project (a gu
 
 Built on the [AT Protocol](https://atproto.com): you sign in with an existing Bluesky/AT account, and your projects, updates and replies are stored as records in your own account (`pub.workbench.*`), not on our servers. This site indexes and displays them.
 
-Status: built and tested, not yet deployed. Live checks (sign-in against a real account, ingest, smoke test) remain.
+Status: deployed at https://workbench.pub (web Worker, ingest cron and D1 are live). Still to be verified live: sign-in against a real account and first posts.
 
 ## How it works
 
