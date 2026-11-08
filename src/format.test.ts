@@ -1,4 +1,4 @@
-import { formatDate, formatDateTime, formatTime } from './format';
+import { formatDate } from './format';
 
 const realTZ = process.env.TZ;
 afterEach(() => {
@@ -28,24 +28,5 @@ describe('formatDate', () => {
     expect(formatDate('2026-11-09T03:30:00Z')).toBe('11.08.2026');
     process.env.TZ = 'Pacific/Auckland';
     expect(formatDate('2026-11-09T03:30:00Z')).toBe('11.09.2026');
-  });
-});
-
-describe('formatTime', () => {
-  beforeEach(() => {
-    process.env.TZ = 'UTC';
-  });
-
-  it('uses a 12-hour clock with am/pm and no padded hour', () => {
-    expect(formatTime('2026-10-21T15:42:00Z')).toBe('3:42 pm');
-    expect(formatTime('2026-10-21T00:05:00Z')).toBe('12:05 am');
-    expect(formatTime('2026-10-21T12:00:00Z')).toBe('12:00 pm');
-    expect(formatTime('2026-10-21T09:07:00Z')).toBe('9:07 am');
-  });
-
-  it('keeps unparseable input as is and joins date and time', () => {
-    expect(formatTime('nope')).toBe('nope');
-    expect(formatDateTime('2026-10-21T15:42:00Z')).toBe('10.21.2026 · 3:42 pm');
-    expect(formatDateTime('nope')).toBe('nope');
   });
 });

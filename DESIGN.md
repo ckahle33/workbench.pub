@@ -13,7 +13,7 @@ Derived from the shipped code in `src/styles/` (entry `src/styles.css`). Swiss/I
 | `--hairline` | `#dcdcdc` | 1px rules between list rows, image edges |
 | `--panel` | `#f2f2f2` | missing-photo panel, sub-form, hover fill |
 | `--grey-mid` / `--grey-light` | `#9a9a9a` / `#c7c7c7` | decoration and disabled borders only, never text |
-| `--accent` | `#d0201a` | the one red: newest update numeral, current marker, in-progress status, errors, hover (5.6:1) |
+| `--accent` | `#d0201a` | the one red: newest update numeral, current marker, in-progress status, errors, hover (5.38:1 on white, 4.81:1 on `--panel`) |
 
 Spacing scale: `--s-1` 8, `--s-2` 16, `--s-3` 24, `--s-4` 32, `--s-5` 48, `--s-6` 64, `--s-7` 96 px. Headings get more space above than below (section `margin-top: --s-6`, title-to-content `--s-3`; timeline entry `--s-5` above, `--s-4` below). Layout: 1200px column, `--gutter` 24px (16px under 480px).
 
@@ -25,7 +25,7 @@ Rules: `--rule` 2px ink (under header, above sections, asides, lists, form secti
 - Mono: IBM Plex Mono 400/500 (`@fontsource/ibm-plex-mono`, latin). Only for metadata, labels, dates, counts, table heads.
 - Scale: project title `clamp(56px, 11vw, 148px)` / .88 / -0.055em / 800 (long titles over 40 chars: `clamp(40px, 6.4vw, 88px)`); profile name `clamp(56px, 10vw, 136px)`; feed/topic title `clamp(56px, 8vw, 72px)`; 404 `clamp(96px, 24vw, 280px)`; form titles `clamp(48px, 9vw, 96px)`; section title 40px/-0.04em; entry heading 30px/-0.03em (24px on phones); card title 28px/700; table title 24px/700; timeline numeral 56px/800/-0.05em (36px on phones).
 - Mono label (`.label`, `.meta-line`): 12-13px, uppercase, 0.04em, `--muted`. Handles and DIDs keep their case (`.as-is`).
-- Dates `MM.DD.YYYY` (US, month first, viewer's local timezone; times as `3:42 pm`), all produced by `src/format.ts`, in `<time dateTime>` with the ISO value; tabular numerals on dates and counts.
+- Dates `MM.DD.YYYY` (US, month first, viewer's local timezone), all produced by `formatDate` in `src/format.ts`; no time of day is shown, in `<time dateTime>` with the ISO value; tabular numerals on dates and counts.
 
 ## Components
 

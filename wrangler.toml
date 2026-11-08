@@ -18,7 +18,8 @@ pattern = "workbench.pub"
 custom_domain = true
 
 # Secrets (never put them here): `wrangler secret put ADMIN_TOKEN` and `wrangler secret put IP_HASH_SALT`.
-# There are no [vars]; the Worker reads only DB, ADMIN_TOKEN and IP_HASH_SALT.
+# There are no [vars]; the Worker reads DB, ADMIN_TOKEN and IP_HASH_SALT, plus DEV_PLACEHOLDERS
+# (local dev only, set in the gitignored .dev.vars, never in this file).
 
 [[d1_databases]]
 binding = "DB"

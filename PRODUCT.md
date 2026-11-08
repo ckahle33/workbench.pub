@@ -10,11 +10,11 @@ web
 
 ## Users
 
-Makers who build things over time and want to show how: electronics and guitar-pedal builders, music producers and recordists, ceramicists, woodworkers, illustrators, 3D printers. They post from a phone at the bench (photos of a half-built thing) and read on phone or desktop. Visitors can read without an account; posting needs an existing Bluesky/AT Protocol account.
+Makers who build things over time and want to show how: electronics and guitar-pedal builders, music producers and recordists, ceramicists, woodworkers, illustrators, 3D printers. Visitors can read without an account; posting needs an existing Bluesky/AT Protocol account.
 
 ## Product Purpose
 
-workbench.pub is a social site for showing a project as it gets made. The unit of content is a project: a titled thing with a timeline of updates (photos, notes, links, parts lists). People follow projects and topics and reply to individual updates. Success: a maker posts a project with several updates and other people follow and reply to it. First goal is real use by around ten people, not completeness.
+workbench.pub is a social site for showing a project as it gets made. The unit of content is a project: a titled thing with a timeline of updates (photos, notes, links, parts lists). People follow projects and topics and reply to individual updates. Success: a maker posts a project with several updates and other people follow and reply to it. First goal, in the owner's words: show it to about ten makers, and aim for five of them posting a project timeline.
 
 ## Positioning
 
