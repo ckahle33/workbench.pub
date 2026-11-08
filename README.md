@@ -31,6 +31,8 @@ npm run dev       # Vite dev server; /api is proxied to wrangler on 8787
 ```
 
 Copy `.dev.vars.example` to `.dev.vars` and set `ADMIN_TOKEN` before running the API locally.
+
+Demo content: `npm run db:migrate:local && npm run db:seed:local` fills the LOCAL D1 with clearly fake demo projects (`did:plc:demo...` DIDs, `.demo.invalid` handles) from `scripts/dev-seed.sql`; re-running it replaces only those rows. Never run it with `--remote`. With `DEV_PLACEHOLDERS=1` in `.dev.vars`, the blob route serves generated SVG placeholders for the demo images (CIDs `ph-43-*`, `ph-32-*`, `ph-11-*`, `ph-34-*`); it is off when the var is unset, never applies to other DIDs, and must never be set in `wrangler.toml` or production. One demo image is deliberately broken so the failed-image fallback shows.
 The full design is in `docs/superpowers/specs/` and the build plan is in `docs/superpowers/plans/`.
 
 ## Developer notes

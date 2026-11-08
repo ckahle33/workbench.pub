@@ -11,6 +11,8 @@
     "db:migrate:remote": "wrangler d1 migrations apply workbench --remote",
     "deploy:web": "npm run build && wrangler deploy",
     "deploy:ingest": "wrangler deploy --config ingest/wrangler.toml",
+    "db:migrate:local": "wrangler d1 migrations apply workbench --local",
+    "db:seed:local": "wrangler d1 execute workbench --local --file scripts/dev-seed.sql",
     "seed:topics": "tsx --env-file-if-exists=.env scripts/seed-topics.ts"
   },
   "dependencies": {
