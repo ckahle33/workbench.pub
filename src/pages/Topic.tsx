@@ -22,7 +22,7 @@ function TopicBody({ slug }: { slug: string }) {
   if (list.phase === 'loading') return <Status kind="loading" />;
   if (list.phase === 'notfound') {
     return (
-      <Status kind="notfound" action={<Link to="/" className="btn">See the latest updates</Link>}>
+      <Status kind="notfound" action={<Link to="/feed" className="btn">See the latest updates</Link>}>
         Topic not found.
       </Status>
     );

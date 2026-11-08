@@ -44,6 +44,12 @@ describe('About page', () => {
     }
   });
 
+  it('does not claim a photo and one line is enough (an update needs a heading and notes)', () => {
+    render(<MemoryRouter><About /></MemoryRouter>);
+    expect(screen.queryByText(/a photo and one line is enough/i)).toBeNull();
+    expect(screen.getByText(/a heading, a few notes and, if you have one, a photo/i)).toBeInTheDocument();
+  });
+
   it('explains the process as a numbered list of four steps', () => {
     render(
       <MemoryRouter>

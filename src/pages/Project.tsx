@@ -55,7 +55,7 @@ export function Project() {
   if (list.phase === 'error') return <Status kind="error" />;
   if (!project) {
     return (
-      <Status kind="notfound" action={<Link to="/" className="btn">See the latest updates</Link>}>
+      <Status kind="notfound" action={<Link to="/feed" className="btn">See the latest updates</Link>}>
         Project not found.
       </Status>
     );

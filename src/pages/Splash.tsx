@@ -132,7 +132,7 @@ function LatestFromSite() {
 const STEPS = [
   { title: 'Sign in', text: 'Use the Bluesky account you already have. There is no new password.' },
   { title: 'Start a project', text: 'Give it a title, a one-line summary and a topic, such as electronics or ceramics.' },
-  { title: 'Add updates as you go', text: 'A photo and one line is enough. Each update gets a date and a number in the timeline.' },
+  { title: 'Add updates as you go', text: 'A heading, a few notes and, if you have one, a photo. Each update gets a date and a number in the timeline.' },
 ];
 
 export function Splash() {
@@ -190,7 +190,7 @@ export function Splash() {
             </li>
           ))}
         </ol>
-        <p className="splash-note">Posting an update to Bluesky as well is optional. You choose each time.</p>
+        <p className="splash-note">Posting an update to Bluesky as well is optional. It is off until you tick it on an update, and you can untick it on any update.</p>
       </section>
 
       <section className="splash-section splash-own" aria-labelledby="splash-own-h">

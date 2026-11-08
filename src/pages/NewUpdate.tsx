@@ -245,7 +245,13 @@ export function NewUpdate() {
         {crosspostState === 'done' && <p role="status">Posted to Bluesky.</p>}
         {crosspostNotice && <p role="status">{crosspostNotice}</p>}
         <p>
-          <Link to={postedHref} onClick={() => (leftRef.current = true)}>
+          <Link
+            to={postedHref}
+            onClick={(e) => {
+              // Only a plain click leaves; ctrl/meta/shift/middle clicks open a new tab and this page stays.
+              if (e.button === 0 && !e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey) leftRef.current = true;
+            }}
+          >
             Back to the project
           </Link>
         </p>

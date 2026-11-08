@@ -32,7 +32,7 @@ export function About() {
           </li>
           <li>
             <h3>Add updates as you go</h3>
-            <p>A photo and one line is enough. When you add an update you can choose to post it to Bluesky as well.</p>
+            <p>A heading, a few notes and, if you have one, a photo. When you add an update you can choose to post it to Bluesky as well.</p>
           </li>
           <li>
             <h3>Others follow and reply</h3>

@@ -233,6 +233,22 @@ describe('cross-post to Bluesky (opt-in)', () => {
     expect(realErrors()).toEqual([]);
   });
 
+  it('still goes to the project after a modified click on Back to the project (new tab, page kept)', async () => {
+    let resolve!: (v: { uri: string }) => void;
+    vi.mocked(createCrosspost).mockReturnValue(new Promise((r) => (resolve = r)));
+    await fillAndTick();
+    await screen.findByText(/posting to bluesky/i);
+    const back = screen.getByRole('link', { name: /back to the project/i });
+    fireEvent.click(back, { ctrlKey: true });
+    fireEvent.click(back, { metaKey: true });
+    fireEvent.click(back, { shiftKey: true });
+    fireEvent.click(back, { button: 1 });
+    resolve({ uri: 'at://x/app.bsky.feed.post/1' });
+    expect(await screen.findByText(/posted to bluesky\./i)).toBeInTheDocument();
+    expect(await screen.findByText('timeline page', {}, { timeout: 3000 })).toBeInTheDocument();
+    expect(nav.calls).toEqual([`/p/${ALICE}/p1`]);
+  });
+
   it('does not crash or navigate when the user leaves and the cross-post then fails', async () => {
     let reject!: (e: unknown) => void;
     vi.mocked(createCrosspost).mockReturnValue(new Promise((_, rej) => (reject = rej)));

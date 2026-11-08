@@ -49,6 +49,11 @@ describe('splash at / (signed out)', () => {
     expect(screen.getByRole('link', { name: 'Look around first' })).toHaveAttribute('href', '/feed');
     expect(screen.getByRole('link', { name: /how your data is stored/i })).toHaveAttribute('href', '/about');
     expect(screen.getByText(/free\. uses your existing bluesky account\./i)).toBeInTheDocument();
+    // Only true claims: an update needs a heading and notes; the photo is optional; cross-posting is opt-in and remembered.
+    expect(screen.queryByText(/a photo and one line is enough/i)).toBeNull();
+    expect(screen.getByText(/a heading, a few notes and, if you have one, a photo\./i)).toBeInTheDocument();
+    expect(screen.queryByText(/you choose each time/i)).toBeNull();
+    expect(screen.getByText(/it is off until you tick it on an update, and you can untick it on any update\./i)).toBeInTheDocument();
     await waitFor(() => expect(document.title).toBe(SPLASH_TITLE));
     // Heading levels never skip.
     const levels = screen.getAllByRole('heading').map((h) => Number(h.tagName[1]));

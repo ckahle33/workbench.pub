@@ -32,7 +32,7 @@ export function Profile() {
   if (list.phase === 'loading') return <Status kind="loading" />;
   if (list.phase === 'notfound' && !own) {
     return (
-      <Status kind="notfound" action={<Link to="/" className="btn">See the latest updates</Link>}>
+      <Status kind="notfound" action={<Link to="/feed" className="btn">See the latest updates</Link>}>
         Profile not found.
       </Status>
     );
