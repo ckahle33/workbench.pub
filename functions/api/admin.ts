@@ -1,5 +1,5 @@
 import { Hono, type Context } from 'hono';
-import { blockDid, hideUri, insertReportOncePerWindow, listReports } from '../../shared/db';
+import { blockDid, hideUri, insertReport, listReports } from '../../shared/db';
 import type { Env } from './read';
 
 const REASON_MAX = 500;
@@ -64,14 +64,17 @@ export function adminRoutes(): Hono<{ Bindings: Env }> {
     const ip = c.req.header('CF-Connecting-IP') ?? 'unknown';
     const ipHash = hex(await sha256(`${c.env.IP_HASH_SALT || DEFAULT_SALT}:${ip}`));
     const now = Date.now();
-    const stored = await insertReportOncePerWindow(c.env.DB, {
+    const outcome = await insertReport(c.env.DB, {
       uri: body.uri,
       reason: body.reason,
       ipHash,
       nowMs: now,
       sinceMs: now - DAY_MS,
     });
-    return stored ? c.json({ ok: true }, 201) : c.json({ error: 'already reported' }, 429);
+    if (outcome === 'stored') return c.json({ ok: true }, 201);
+    // The table being full is a server-side condition (503); the per-ip and per-uri limits are 429.
+    if (outcome === 'full') return c.json({ error: 'reports unavailable' }, 503);
+    return c.json({ error: outcome === 'duplicate' ? 'already reported' : 'too many reports' }, 429);
   });
 
   const admin = new Hono<{ Bindings: Env }>();

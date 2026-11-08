@@ -1,7 +1,7 @@
 import { env } from 'cloudflare:test';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { applyEvent } from '../../ingest/src/apply';
-import { upsertProject, upsertTopic, upsertUpdate } from '../../shared/db';
+import { REPORTS_MAX_ROWS, REPORTS_PER_IP_PER_DAY, upsertProject, upsertTopic, upsertUpdate } from '../../shared/db';
 import app from '../index';
 
 const db = (env as unknown as { DB: D1Database }).DB;
@@ -125,5 +125,34 @@ describe('POST /api/report', () => {
     expect((await report({ uri: P1, reason: 'a' })).status).toBe(201);
     await db.prepare('UPDATE reports SET created_at = created_at - ?').bind(25 * 3_600_000).run();
     expect((await report({ uri: P1, reason: 'b' })).status).toBe(201);
+  });
+  const uriN = (n: number) => `at://${ALICE}/pub.workbench.update/n${n}`;
+
+  it('caps one IP at 20 reports per day across distinct uris; other IPs are unaffected', async () => {
+    expect(REPORTS_PER_IP_PER_DAY).toBe(20);
+    for (let i = 0; i < 20; i++) expect((await report({ uri: uriN(i), reason: '' })).status).toBe(201);
+    expect((await report({ uri: uriN(20), reason: '' })).status).toBe(429);
+    expect(await rows()).toHaveLength(20);
+    expect((await report({ uri: uriN(20), reason: '' }, '203.0.113.50')).status).toBe(201);
+  });
+
+  it('prunes reports older than 30 days on insert (bounded batch of 50)', async () => {
+    const old = Date.now() - 31 * 24 * 3_600_000;
+    for (let i = 0; i < 60; i++) {
+      await db.prepare('INSERT INTO reports (subject_uri, reason, ip_hash, created_at) VALUES (?, ?, ?, ?)').bind(uriN(i), '', 'h', old).run();
+    }
+    expect((await report({ uri: P1, reason: '' })).status).toBe(201);
+    expect(await rows()).toHaveLength(60 - 50 + 1);
+  });
+
+  it('refuses new reports with 503 once the table is at its ceiling', async () => {
+    const now = Date.now();
+    await db.batch(
+      Array.from({ length: REPORTS_MAX_ROWS }, (_, i) =>
+        db.prepare('INSERT INTO reports (subject_uri, reason, ip_hash, created_at) VALUES (?, ?, ?, ?)').bind(uriN(i), '', `h${i % 500}`, now),
+      ),
+    );
+    expect((await report({ uri: P1, reason: '' })).status).toBe(503);
+    expect(await rows()).toHaveLength(REPORTS_MAX_ROWS);
   });
 });

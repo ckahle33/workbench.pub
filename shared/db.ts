@@ -133,23 +133,55 @@ export interface ReportRow {
   createdAt: number;
 }
 
+/** Reports accepted per ip_hash per rolling 24h, across all uris. */
+export const REPORTS_PER_IP_PER_DAY = 20;
+/** Hard ceiling on total rows in `reports`. */
+export const REPORTS_MAX_ROWS = 5000;
+/** Reports older than this are pruned on insert. */
+export const REPORTS_RETENTION_MS = 30 * 24 * 3_600_000;
+const REPORTS_PRUNE_BATCH = 50;
+
+export type ReportOutcome = 'stored' | 'duplicate' | 'ip_cap' | 'full';
+
+/** Deletes up to REPORTS_PRUNE_BATCH reports older than the retention window. */
+export async function pruneOldReports(db: D1Database, nowMs: number): Promise<void> {
+  await db
+    .prepare('DELETE FROM reports WHERE id IN (SELECT id FROM reports WHERE created_at < ? LIMIT ?)')
+    .bind(nowMs - REPORTS_RETENTION_MS, REPORTS_PRUNE_BATCH)
+    .run();
+}
+
 /**
- * Inserts a report unless `ipHash` already reported `uri` at or after `sinceMs`.
- * One atomic statement, so concurrent duplicates cannot both land. True when inserted.
+ * Prunes a few expired rows, then inserts a report in one atomic statement unless
+ * the ip already reported `uri` within `sinceMs`, the ip is at its daily cap, or the
+ * table is at its ceiling. The refusal reason is diagnosed only on the failure path.
  */
-export async function insertReportOncePerWindow(
+export async function insertReport(
   db: D1Database,
   r: { uri: string; reason: string; ipHash: string; nowMs: number; sinceMs: number },
-): Promise<boolean> {
+): Promise<ReportOutcome> {
+  await pruneOldReports(db, r.nowMs);
   const res = await db
     .prepare(
       `INSERT INTO reports (subject_uri, reason, ip_hash, created_at)
        SELECT ?1, ?2, ?3, ?4
-       WHERE NOT EXISTS (SELECT 1 FROM reports WHERE ip_hash = ?3 AND subject_uri = ?1 AND created_at >= ?5)`,
+       WHERE NOT EXISTS (SELECT 1 FROM reports WHERE ip_hash = ?3 AND subject_uri = ?1 AND created_at >= ?5)
+         AND (SELECT COUNT(*) FROM reports WHERE ip_hash = ?3 AND created_at >= ?5) < ?6
+         AND (SELECT COUNT(*) FROM reports) < ?7`,
     )
-    .bind(r.uri, r.reason, r.ipHash, r.nowMs, r.sinceMs)
+    .bind(r.uri, r.reason, r.ipHash, r.nowMs, r.sinceMs, REPORTS_PER_IP_PER_DAY, REPORTS_MAX_ROWS)
     .run();
-  return res.meta.changes > 0;
+  if (res.meta.changes > 0) return 'stored';
+  const dup = await db
+    .prepare('SELECT 1 AS x FROM reports WHERE ip_hash = ? AND subject_uri = ? AND created_at >= ?')
+    .bind(r.ipHash, r.uri, r.sinceMs)
+    .first();
+  if (dup) return 'duplicate';
+  const mine = await db
+    .prepare('SELECT COUNT(*) AS n FROM reports WHERE ip_hash = ? AND created_at >= ?')
+    .bind(r.ipHash, r.sinceMs)
+    .first<{ n: number }>();
+  return (mine?.n ?? 0) >= REPORTS_PER_IP_PER_DAY ? 'ip_cap' : 'full';
 }
 
 /** Newest reports first. The reporter's ip_hash is deliberately not returned. */
