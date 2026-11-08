@@ -8,6 +8,9 @@
     "build": "tsc --noEmit && vite build",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
+    "db:migrate:remote": "wrangler d1 migrations apply workbench --remote",
+    "deploy:web": "npm run build && wrangler deploy",
+    "deploy:ingest": "wrangler deploy --config ingest/wrangler.toml",
     "seed:topics": "tsx --env-file-if-exists=.env scripts/seed-topics.ts"
   },
   "dependencies": {

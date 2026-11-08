@@ -4,6 +4,7 @@ main = "src/index.ts"
 compatibility_date = "2026-11-01"
 compatibility_flags = ["nodejs_compat"]
 
+# UTC. Workers Free allows 5 Cron Triggers per account and 10 ms CPU per run (see README, Deploying).
 [triggers]
 crons = ["*/5 * * * *"]
 
