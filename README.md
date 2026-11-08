@@ -165,7 +165,7 @@ Consequence for the ingest Worker: the 50 query limit and the 10 ms CPU limit ar
 4. Link cards: a Worker cannot resolve DNS, so the SSRF check (`shared/ssrf.ts`) is hostname- and literal-IP-based; a public-looking hostname that resolves to a private address (DNS rebinding, nip.io-style names) is not caught. Residual risk; Cloudflare's network egress limits the blast radius but this is not verified.
 5. Follow state is not persistent across devices: there is no "my follows" API, so the follow record uri is remembered in the browser's localStorage (`src/follows.ts`) per signed-in did. A new browser shows everything as not followed.
 6. Optimistic items are removed only when the server later returns the same `uri` (`src/optimistic.ts`); if indexing rejects the record, or ingest is stalled, the item stays visible.
-7. `blockDid` stops future ingest and hides nothing already indexed; hide existing rows with `/api/admin/hide` per URI.
+7. `/api/admin/block` stops future ingest from a DID and hides everything it already has indexed (its topics, projects, updates, replies and follows). The edge-cached global feed and topic list can still show it for up to 30 seconds, and already-cached images stay cached at the edge.
 
 ## Scripts
 

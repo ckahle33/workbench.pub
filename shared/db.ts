@@ -141,11 +141,16 @@ export async function isBlocked(db: D1Database, did: string): Promise<boolean> {
   return row !== null;
 }
 
+/**
+ * Blocks future ingest from `did` and hides everything it already has indexed (topics it owns,
+ * projects, updates, replies, follows), in one db.batch (one D1 query). Idempotent; upserts never
+ * touch `hidden`, so a later re-ingest of the same records stays hidden.
+ */
 export async function blockDid(db: D1Database, did: string): Promise<void> {
-  await db
-    .prepare('INSERT INTO blocked_dids (did, blocked_at) VALUES (?, ?) ON CONFLICT(did) DO NOTHING')
-    .bind(did, Date.now())
-    .run();
+  await db.batch([
+    db.prepare('INSERT INTO blocked_dids (did, blocked_at) VALUES (?, ?) ON CONFLICT(did) DO NOTHING').bind(did, Date.now()),
+    ...CONTENT_TABLES.map((t) => db.prepare(`UPDATE ${t} SET hidden = 1 WHERE did = ? AND hidden = 0`).bind(did)),
+  ]);
 }
 
 /** Marks the record hidden in whichever content table holds it. */

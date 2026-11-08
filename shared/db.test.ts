@@ -121,6 +121,54 @@ describe('blocks', () => {
     await blockDid(db, 'did:plc:x');
     expect(await isBlocked(db, 'did:plc:x')).toBe(true);
   });
+
+  it('blocking hides everything that DID already has indexed, in all five tables, and upserts keep it hidden', async () => {
+    const X = 'did:plc:x';
+    const m = (col: string, rkey: string, did = X) => ({ uri: `at://${did}/${col}/${rkey}`, did, rkey, indexedAt: 1000 });
+    await upsertTopic(db, { slug: 'robots', name: 'R', description: '', uri: `at://${X}/pub.workbench.topic/robots`, ownerDid: X, indexedAt: 1 });
+    await upsertProject(db, m('pub.workbench.project', 'p1'), project('mine'));
+    const upd = { $type: 'pub.workbench.update' as const, project: `at://${X}/pub.workbench.project/p1`, heading: 'h', body: 'b', createdAt: '2026-01-01T00:00:00Z' };
+    await upsertUpdate(db, m('pub.workbench.update', 'u1'), upd);
+    const rep = { $type: 'pub.workbench.reply' as const, subject: 'at://did:plc:y/pub.workbench.update/u9', body: 'hi', createdAt: '2026-01-01T00:00:00Z' };
+    await upsertReply(db, m('pub.workbench.reply', 'r1'), rep);
+    await upsertFollow(db, m('pub.workbench.follow', 'f1'), { $type: 'pub.workbench.follow', kind: 'topic', subject: 'robots', createdAt: '2026-01-01T00:00:00Z' } as never);
+    // Someone else's reply must stay visible.
+    await upsertReply(db, m('pub.workbench.reply', 'r2', 'did:plc:y'), rep);
+
+    let batches = 0;
+    const spy = new Proxy(db, {
+      get(t, p) {
+        if (p === 'batch') return (s: D1PreparedStatement[]) => (batches++, t.batch(s));
+        const v = (t as any)[p];
+        return typeof v === 'function' ? v.bind(t) : v;
+      },
+    });
+    await blockDid(spy, X);
+    expect(batches).toBe(1);
+    for (const table of ['topics', 'projects', 'updates', 'replies', 'follows']) {
+      const r = await db.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE did = ? AND hidden = 0`).bind(X).first<{ n: number }>();
+      expect(r!.n, table).toBe(0);
+    }
+    expect((await db.prepare('SELECT hidden FROM replies WHERE did = ?').bind('did:plc:y').first<{ hidden: number }>())!.hidden).toBe(0);
+    // A re-ingest of the same records stays hidden.
+    await upsertProject(db, m('pub.workbench.project', 'p1'), project('again'));
+    await upsertUpdate(db, m('pub.workbench.update', 'u1'), upd);
+    await upsertReply(db, m('pub.workbench.reply', 'r1'), rep);
+    for (const table of ['projects', 'updates', 'replies']) {
+      const r = await db.prepare(`SELECT hidden FROM ${table} WHERE did = ?`).bind(X).first<{ hidden: number }>();
+      expect(r!.hidden, table).toBe(1);
+    }
+    // Idempotent.
+    await blockDid(db, X);
+    expect(await isBlocked(db, X)).toBe(true);
+  });
+
+  it('blocking an unknown DID only records the block', async () => {
+    await upsertProject(db, meta('at://did:plc:a/pub.workbench.project/p1'), project('a'));
+    await blockDid(db, 'did:plc:nobody');
+    expect(await isBlocked(db, 'did:plc:nobody')).toBe(true);
+    expect((await db.prepare('SELECT hidden FROM projects').first<{ hidden: number }>())!.hidden).toBe(0);
+  });
 });
 
 describe('bumpAndCheckRate', () => {
