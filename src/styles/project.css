@@ -245,3 +245,4 @@
 .reply-meta a { color: var(--muted); display: inline-flex; align-items: center; min-height: 44px; margin-block: -12px; }
 .reply-meta a:hover { color: var(--accent); }
 .replies .delete, .replies .delete-confirm { margin-top: var(--s-1); }
+.delete-confirm > .meta { flex-basis: 100%; max-width: 44ch; }

@@ -65,6 +65,12 @@ describe('cross-post to Bluesky (opt-in)', () => {
     expect(createCrosspost).not.toHaveBeenCalled();
   });
 
+  it('tells the user that deleting the update later does not delete the Bluesky post', async () => {
+    renderPage();
+    fireEvent.click(box());
+    expect(await screen.findByText(/deleting the update later does not delete the bluesky post/i)).toBeInTheDocument();
+  });
+
   it('prefills an editable caption from the project title and heading, with a grapheme counter and a note about the link', async () => {
     renderPage();
     fill(/heading/i, 'Cut the panel');

@@ -24,6 +24,22 @@ const renderBtn = (onDeleted = vi.fn()) => {
   return onDeleted;
 };
 
+describe('DeleteButton cross-post warning', () => {
+  const WARN = /does not delete a bluesky post made from it/i;
+  it('warns in the update confirmation, and only there', () => {
+    renderBtn();
+    expect(screen.queryByText(WARN)).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Delete update' }));
+    expect(screen.getByText(WARN)).toBeInTheDocument();
+  });
+
+  it('does not show the warning when deleting a reply', () => {
+    render(<DeleteButton uri={`at://${ALICE}/pub.workbench.reply/r1`} kind="reply" label="Delete reply" />);
+    fireEvent.click(screen.getByRole('button', { name: 'Delete reply' }));
+    expect(screen.queryByText(WARN)).toBeNull();
+  });
+});
+
 describe('DeleteButton', () => {
   it('is shown only to the owner', () => {
     sess.session = { did: BOB, handle: 'bob.test', agent: {} };

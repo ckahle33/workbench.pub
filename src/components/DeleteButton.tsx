@@ -53,6 +53,7 @@ function Confirmable({ session, uri, kind, parentUri, label, onDeleted }: Props 
   }
   return (
     <span className="delete-confirm">
+      {kind === 'update' && <span className="meta">Deleting an update here does not delete a Bluesky post made from it.</span>}
       <button
         ref={confirmRef}
         type="button"

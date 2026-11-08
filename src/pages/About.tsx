@@ -45,12 +45,12 @@ export function About() {
         <h2 id="about-atproto">Why AT Protocol: your own account</h2>
         <p>
           Your projects, updates and replies are saved as records in your own AT Protocol account, not in a database that belongs to this site. workbench.pub keeps
-          an index of public records so it can show them. Because the data lives in your account, you can leave, or use other apps that read the same records.
+          an index of public records so it can show them. Because the data lives in your account, you can leave, and other apps could read the same records.
         </p>
         <p>What that means in practice:</p>
         <ul className="about-list">
           <li>Everything you post is public.</li>
-          <li>Deleting a post here deletes the record from your account.</li>
+          <li>Deleting a post here deletes the record from your account. Deleting an update here does not delete a Bluesky post made from it.</li>
           <li>We can hide something from this site, but we cannot remove it from your account.</li>
         </ul>
       </section>
@@ -86,7 +86,7 @@ export function About() {
         <p>Use the delete control on your own posts.</p>
         <h3>What are topics?</h3>
         <p>
-          A topic is a subject area, such as electronics or ceramics. Each project belongs to one topic, and you can follow a topic to see new projects in it.
+          A topic is a subject area, such as electronics or ceramics. Each project belongs to one topic, and you can follow a topic to see updates from projects in it.
         </p>
       </section>
 

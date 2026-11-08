@@ -40,7 +40,7 @@ export function CrosspostBox({ did, checked, onChecked, caption, onCaption, budg
           </p>
           <FieldError id={`${id}-err`}>{error}</FieldError>
           <p id={`${id}-note`} className="meta">
-            Posts a link back to this update. Your followers on Bluesky will see it.
+            Posts a link back to this update. Your followers on Bluesky will see it. Deleting the update later does not delete the Bluesky post.
           </p>
         </>
       )}

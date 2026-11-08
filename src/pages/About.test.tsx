@@ -65,6 +65,17 @@ describe('About page', () => {
     expect(screen.getByText(/cannot remove (it|them) from your account/i)).toBeInTheDocument();
   });
 
+  it('says deleting an update does not delete a Bluesky post, and words topics and other apps carefully', () => {
+    render(
+      <MemoryRouter>
+        <About />
+      </MemoryRouter>,
+    );
+    expect(screen.getByText(/deleting an update here does not delete a bluesky post made from it/i)).toBeInTheDocument();
+    expect(screen.getByText(/follow a topic to see updates from projects in it/i)).toBeInTheDocument();
+    expect(screen.getByText(/other apps could read the same records/i)).toBeInTheDocument();
+  });
+
   it('links to the repository and bsky.app, has a short FAQ, and no exclamation marks', () => {
     const { container } = render(
       <MemoryRouter>
