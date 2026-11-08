@@ -4,18 +4,22 @@ import { useSession } from '../auth/SessionContext';
 import { DateText } from '../components/Timeline';
 import { LoadMore, Status } from '../components/Status';
 import { usePaged, useTitle } from '../hooks';
+import { optimistic, useOptimistic } from '../optimistic';
 
 function Feed({ path, empty }: { path: string; empty: string }) {
   const feed = usePaged<FeedItem>(path);
+  useOptimistic();
   if (feed.phase === 'loading') return <Status kind="loading" />;
   if (feed.phase !== 'ready') return <Status kind="error" />;
+  // Items the signed-in user just deleted stay hidden until the server drops them.
+  const items = feed.items.filter((u) => !optimistic.isRemoved(u.uri) && !optimistic.isRemoved(u.project.uri));
   return (
     <>
-      {feed.items.length === 0 ? (
+      {items.length === 0 ? (
         <Status kind="empty">{empty}</Status>
       ) : (
         <ul className="cards">
-          {feed.items.map((u) => (
+          {items.map((u) => (
             <li key={u.uri}>
               <p className="meta">
                 <Link to={`/p/${u.project.did}/${u.project.rkey}`} dir="auto">{u.project.title}</Link> · <DateText iso={u.createdAt} />

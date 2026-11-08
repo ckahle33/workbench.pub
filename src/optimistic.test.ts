@@ -58,4 +58,27 @@ describe('optimistic', () => {
     optimistic.add(item(3));
     expect(fn).toHaveBeenCalledTimes(1);
   });
+
+  describe('removals', () => {
+    const scope = (r: { kind: string; parentUri?: string }) => r.kind === 'update' && r.parentUri === 'P';
+
+    it('hides a removed server item and a removed optimistic item', () => {
+      optimistic.add(item(2));
+      optimistic.remove({ uri: item(2).uri, kind: 'update', parentUri: 'P' });
+      optimistic.remove({ uri: 'server-1', kind: 'update', parentUri: 'P' });
+      expect(optimistic.mergeWith([{ uri: 'server-1' }, { uri: 'server-2' }]).map((m) => m.uri)).toEqual(['server-2']);
+      expect(optimistic.isRemoved('server-1')).toBe(true);
+      expect(optimistic.find(item(2).uri)).toBeUndefined();
+    });
+
+    it('keeps hiding while the server still returns the uri, and expires once it stops (in scope only)', () => {
+      optimistic.remove({ uri: 'server-1', kind: 'update', parentUri: 'P' });
+      optimistic.prune([{ uri: 'server-1' }], scope);
+      expect(optimistic.isRemoved('server-1')).toBe(true);
+      optimistic.prune([], (r) => r.kind === 'reply'); // another page: not its business
+      expect(optimistic.isRemoved('server-1')).toBe(true);
+      optimistic.prune([{ uri: 'other' }], scope);
+      expect(optimistic.isRemoved('server-1')).toBe(false);
+    });
+  });
 });

@@ -30,7 +30,18 @@ export interface OptimisticItem {
   parts?: unknown;
 }
 
+/** Something the signed-in user just deleted; hidden until the server stops returning it. */
+export interface Removal {
+  uri: string;
+  kind: OptimisticItem['kind'];
+  /** update: its project; reply: what it answers. */
+  parentUri?: string;
+  /** project: its owner, for the profile list. */
+  did?: string;
+}
+
 let items: readonly OptimisticItem[] = [];
+let removed: ReadonlyMap<string, Removal> = new Map();
 const listeners = new Set<() => void>();
 const notify = () => listeners.forEach((l) => l());
 
@@ -42,25 +53,46 @@ export const optimistic = {
     notify();
   },
 
+  /** Hides `r.uri` everywhere (server and optimistic items) until a page prunes it. */
+  remove(r: Removal): void {
+    items = items.filter((i) => i.uri !== r.uri);
+    removed = new Map(removed).set(r.uri, r);
+    notify();
+  },
+
+  isRemoved(uri: string): boolean {
+    return removed.has(uri);
+  },
+
   /**
    * Optimistic items (optionally only those passing `match`) first, newest first, then the
-   * server items. An optimistic item whose uri the server already returned is dropped.
-   * Pure: neither the store nor the input is changed.
+   * server items. An optimistic item whose uri the server already returned is dropped, and
+   * removed uris are left out. Pure: neither the store nor the input is changed.
    */
   mergeWith<T extends { uri: string }>(serverItems: readonly T[], match: (i: OptimisticItem) => boolean = () => true): (T | OptimisticItem)[] {
     const seen = new Set(serverItems.map((s) => s.uri));
     const mine = items.filter((i) => !seen.has(i.uri) && match(i)).sort(newestFirst);
-    return [...mine, ...serverItems];
+    return [...mine, ...serverItems.filter((s) => !removed.has(s.uri))];
   },
 
-  /** Forget items the server now has. Pages call this from an effect. */
-  prune(serverItems: readonly { uri: string }[]): void {
+  /**
+   * Forget items the server now has. With `inScope`, also expire removals that list covers
+   * (e.g. the updates of this project) once the server no longer returns them. Pages call this
+   * from an effect.
+   */
+  prune(serverItems: readonly { uri: string }[], inScope?: (r: Removal) => boolean): void {
     const seen = new Set(serverItems.map((s) => s.uri));
     const next = items.filter((i) => !seen.has(i.uri));
-    if (next.length !== items.length) {
-      items = next;
-      notify();
+    let changed = next.length !== items.length;
+    items = next;
+    if (inScope) {
+      const keep = new Map([...removed].filter(([uri, r]) => seen.has(uri) || !inScope(r)));
+      if (keep.size !== removed.size) {
+        removed = keep;
+        changed = true;
+      }
     }
+    if (changed) notify();
   },
 
   find(uri: string): OptimisticItem | undefined {
@@ -69,6 +101,7 @@ export const optimistic = {
 
   clear(): void {
     items = [];
+    removed = new Map();
     notify();
   },
 

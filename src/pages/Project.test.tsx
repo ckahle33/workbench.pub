@@ -1,17 +1,20 @@
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { optimistic } from '../optimistic';
 import { ALICE, image, mockApi, project, update } from '../testUtils';
 import { Project } from './Project';
+import { deleteRecord } from '../records/write';
 
 const sess = vi.hoisted(() => ({ session: null as unknown }));
 vi.mock('../auth/SessionContext', () => ({ useSession: () => ({ session: sess.session, loading: false, signOut: vi.fn() }) }));
+vi.mock('../records/write', async (importOriginal) => ({ ...(await importOriginal<typeof import('../records/write')>()), deleteRecord: vi.fn() }));
 
 function renderPage() {
   return render(
     <MemoryRouter initialEntries={[`/p/${ALICE}/p1`]}>
       <Routes>
         <Route path="/p/:did/:rkey" element={<Project />} />
+        <Route path="/profile/:did" element={<p>profile page</p>} />
       </Routes>
     </MemoryRouter>,
   );
@@ -30,6 +33,8 @@ function serve(items: unknown[], proj = project(1)) {
 afterEach(() => {
   optimistic.clear();
   document.title = '';
+  sess.session = null;
+  vi.mocked(deleteRecord).mockReset();
 });
 
 describe('Project page', () => {
@@ -193,5 +198,42 @@ describe('Project page controls', () => {
     await screen.findByRole('heading', { level: 1, name: 'Project 1' });
     expect(screen.getByRole('link', { name: /sign in to follow/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^report/i })).toBeInTheDocument();
+  });
+
+  describe('delete', () => {
+    it('offers Delete only to the owner', async () => {
+      serve([update(1)]);
+      sess.session = { did: 'did:plc:someoneelse', handle: 'x.test', agent: {} };
+      renderPage();
+      await screen.findByRole('heading', { level: 1, name: 'Project 1' });
+      expect(screen.queryByRole('button', { name: /delete/i })).toBeNull();
+    });
+
+    it('deletes an update after confirmation and hides it at once, while the server still returns it', async () => {
+      serve([update(2, { heading: 'Keep me' }), update(1, { heading: 'Remove me' })]);
+      sess.session = { did: ALICE, handle: 'alice.test', agent: {} };
+      vi.mocked(deleteRecord).mockResolvedValue(undefined);
+      renderPage();
+      await screen.findByRole('heading', { level: 2, name: 'Remove me' });
+      const entries = screen.getAllByRole('article');
+      fireEvent.click(within(entries[1]).getByRole('button', { name: 'Delete update' }));
+      fireEvent.click(within(entries[1]).getByRole('button', { name: 'Confirm delete' }));
+      await waitFor(() => expect(screen.queryByRole('heading', { level: 2, name: 'Remove me' })).toBeNull());
+      expect(deleteRecord).toHaveBeenCalledWith(sess.session, update(1).uri);
+      expect(screen.getByRole('heading', { level: 2, name: 'Keep me' })).toBeInTheDocument();
+      expect(optimistic.isRemoved(update(1).uri)).toBe(true); // server still lists it, so the removal stays
+    });
+
+    it('deletes the project and leaves for the profile page', async () => {
+      serve([]);
+      sess.session = { did: ALICE, handle: 'alice.test', agent: {} };
+      vi.mocked(deleteRecord).mockResolvedValue(undefined);
+      renderPage();
+      fireEvent.click(await screen.findByRole('button', { name: 'Delete project' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Confirm delete' }));
+      expect(await screen.findByText('profile page')).toBeInTheDocument();
+      expect(deleteRecord).toHaveBeenCalledWith(sess.session, project(1).uri);
+      expect(optimistic.isRemoved(project(1).uri)).toBe(true);
+    });
   });
 });

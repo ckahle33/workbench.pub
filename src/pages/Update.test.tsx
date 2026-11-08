@@ -1,4 +1,5 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { deleteRecord } from '../records/write';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { optimistic } from '../optimistic';
 import { ALICE, BOB, mockApi, project, update } from '../testUtils';
@@ -16,6 +17,7 @@ const reply = (n: number, subject: string, body: string) => ({
 
 const sess = vi.hoisted(() => ({ session: null as unknown }));
 vi.mock('../auth/SessionContext', () => ({ useSession: () => ({ session: sess.session, loading: false, signOut: vi.fn() }) }));
+vi.mock('../records/write', async (importOriginal) => ({ ...(await importOriginal<typeof import('../records/write')>()), deleteRecord: vi.fn() }));
 
 function renderPage() {
   return render(
@@ -30,7 +32,11 @@ function renderPage() {
 const u1 = update(1, { heading: 'Soldered it', body: 'it works' });
 const full = { ...u1, project: { uri: project(1).uri, did: ALICE, rkey: 'p1', title: 'Project 1', topicSlug: 'synths' } };
 
-afterEach(() => optimistic.clear());
+afterEach(() => {
+  optimistic.clear();
+  sess.session = null;
+  vi.mocked(deleteRecord).mockReset();
+});
 
 describe('Update page', () => {
   it('shows the update, its project link and the replies thread', async () => {
@@ -107,5 +113,36 @@ describe('Update page reply box', () => {
     sess.session = { did: BOB, handle: 'bob.test', agent: {} };
     renderPage();
     expect(await screen.findByLabelText(/your reply/i)).toBeInTheDocument();
+  });
+
+  it('lets a reply author delete their own reply (only theirs), hiding it at once', async () => {
+    mockApi(() => ({
+      update: full,
+      author: { did: ALICE },
+      items: [reply(1, u1.uri, 'Bob says hi'), { ...reply(2, u1.uri, 'Alice answers'), uri: `at://${ALICE}/pub.workbench.reply/r2`, did: ALICE }],
+      cursor: null,
+    }));
+    sess.session = { did: BOB, handle: 'bob.test', agent: {} };
+    vi.mocked(deleteRecord).mockResolvedValue(undefined);
+    renderPage();
+    await screen.findByText('Bob says hi');
+    // Bob owns one reply, not the update or Alice's reply.
+    expect(screen.getAllByRole('button', { name: /^delete/i }).map((b) => b.textContent)).toEqual(['Delete reply']);
+    fireEvent.click(screen.getByRole('button', { name: 'Delete reply' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm delete' }));
+    await waitFor(() => expect(screen.queryByText('Bob says hi')).toBeNull());
+    expect(screen.getByText('Alice answers')).toBeInTheDocument();
+    expect(deleteRecord).toHaveBeenCalledWith(sess.session, `at://${BOB}/pub.workbench.reply/r1`);
+  });
+
+  it('lets the update owner delete it from its page', async () => {
+    mockApi(() => ({ update: full, author: { did: ALICE }, items: [], cursor: null }));
+    sess.session = { did: ALICE, handle: 'alice.test', agent: {} };
+    vi.mocked(deleteRecord).mockResolvedValue(undefined);
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete update' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm delete' }));
+    await waitFor(() => expect(deleteRecord).toHaveBeenCalledWith(sess.session, u1.uri));
+    expect(optimistic.isRemoved(u1.uri)).toBe(true);
   });
 });

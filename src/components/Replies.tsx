@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import type { ReplyView } from '../api';
+import { DeleteButton } from './DeleteButton';
 import { DateText } from './Timeline';
 import { Status } from './Status';
 
@@ -23,6 +24,7 @@ export function Replies({ replies, rootUri }: { replies: ReplyView[]; rootUri: s
             <Link to={`/profile/${r.did}`} className="did">{r.did}</Link> · <DateText iso={r.createdAt} />
           </p>
           <p className="notes" dir="auto">{r.body}</p>
+          <DeleteButton uri={r.uri} kind="reply" parentUri={r.subjectUri} label="Delete reply" />
         </li>
       ))}
     </ol>

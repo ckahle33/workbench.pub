@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { blobUrl, parseImages, parseLinks, parseParts, type UpdateView } from '../api';
+import { DeleteButton } from './DeleteButton';
 import { LinkCard } from './LinkCard';
 
 export function DateText({ iso }: { iso: string }) {
@@ -33,6 +34,11 @@ export function TimelineEntry({ update: u, headingLevel = 2 }: { update: UpdateV
         <DateText iso={u.createdAt} />
       </p>
       <Heading dir="auto">{headingLevel === 1 ? u.heading : <Link to={`/u/${u.did}/${u.rkey}`}>{u.heading}</Link>}</Heading>
+      {headingLevel === 2 && (
+        <div className="actions">
+          <DeleteButton uri={u.uri} kind="update" parentUri={u.projectUri} label="Delete update" />
+        </div>
+      )}
       {images.length > 0 && (
         <div className="photos">
           {images.map((img, i) => (

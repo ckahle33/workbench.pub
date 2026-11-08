@@ -1,8 +1,9 @@
 import { useEffect } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import type { Author, Page, ProjectView, UpdateView } from '../api';
 import { useSession } from '../auth/SessionContext';
 import { AuthorName } from '../components/AuthorName';
+import { DeleteButton } from '../components/DeleteButton';
 import { FollowButton } from '../components/FollowButton';
 import { ReportButton } from '../components/ReportButton';
 import { LoadMore, Status } from '../components/Status';
@@ -22,12 +23,13 @@ export function Project() {
   const mine = useOptimistic();
   const { session } = useSession();
   const uri = `at://${did}/pub.workbench.project/${rkey}`;
+  const navigate = useNavigate();
 
   // The server has caught up with some optimistic items: forget them.
   const loaded = list.phase === 'ready' ? list.items : null;
   useEffect(() => {
-    if (loaded) optimistic.prune(loaded);
-  }, [loaded, mine]);
+    if (loaded) optimistic.prune(loaded, (r) => r.kind === 'update' && r.parentUri === uri);
+  }, [loaded, mine, uri]);
 
   // A project the author just created may not be indexed yet.
   const pending = list.phase === 'notfound' ? mine.find((i) => i.uri === uri && i.kind === 'project') : undefined;
@@ -56,6 +58,7 @@ export function Project() {
           {session?.did === project.did && <Link to={`/p/${did}/${rkey}/update`} className="button-link">Add update</Link>}
           <FollowButton kind="project" subject={project.uri} />
           <ReportButton uri={project.uri} />
+          <DeleteButton uri={project.uri} kind="project" label="Delete project" onDeleted={() => navigate(`/profile/${did}`)} />
         </div>
       </header>
       {updates.length === 0 ? <Status kind="empty">No updates yet.</Status> : <Timeline updates={updates} />}
