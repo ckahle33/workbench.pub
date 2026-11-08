@@ -1,0 +1,80 @@
+import { Hono } from 'hono';
+import { isSafeUrl, safeFetch } from '../../shared/ssrf';
+import type { Env } from './read';
+
+export interface BlobOptions {
+  /** Injectable for tests; defaults to the global fetch. */
+  fetchFn?: typeof fetch;
+}
+
+const DID_PLC = /^did:plc:[a-z2-7]{24}$/;
+const DID_WEB = /^did:web:[a-zA-Z0-9][a-zA-Z0-9.-]*$/;
+const CID = /^(b[a-z2-7]{30,120}|Qm[1-9A-HJ-NP-Za-km-z]{44})$/;
+const MAX_BLOB_BYTES = 5 * 1024 * 1024;
+const DID_DOC_MAX_BYTES = 64 * 1024;
+const BLOB_TIMEOUT_MS = 10_000;
+// Never svg or html: blobs are served from our own origin.
+const IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/avif']);
+
+function didDocUrl(did: string): string | null {
+  if (DID_PLC.test(did)) return `https://plc.directory/${did}`;
+  if (DID_WEB.test(did)) return `https://${did.slice('did:web:'.length)}/.well-known/did.json`;
+  return null;
+}
+
+async function resolvePds(did: string, fetchImpl: typeof fetch): Promise<string | null> {
+  const docUrl = didDocUrl(did);
+  if (!docUrl) return null;
+  const res = await safeFetch(docUrl, fetchImpl, {
+    maxBytes: DID_DOC_MAX_BYTES,
+    overflow: 'error',
+    headers: { accept: 'application/json' },
+  });
+  const doc = JSON.parse(new TextDecoder().decode(res.body)) as {
+    id?: unknown;
+    service?: { id?: unknown; type?: unknown; serviceEndpoint?: unknown }[];
+  };
+  if (doc.id !== did || !Array.isArray(doc.service)) return null;
+  const svc = doc.service.find(
+    (s) => s && typeof s.id === 'string' && s.id.endsWith('#atproto_pds') && s.type === 'AtprotoPersonalDataServer',
+  );
+  if (!svc || typeof svc.serviceEndpoint !== 'string' || !isSafeUrl(svc.serviceEndpoint)) return null;
+  return new URL(svc.serviceEndpoint).origin;
+}
+
+const notFound = (c: { json: (b: unknown, s: 404) => Response; header: (k: string, v: string) => void }) => {
+  c.header('Cache-Control', 'no-store');
+  return c.json({ error: 'not found' }, 404);
+};
+
+/** Image proxy for atproto blobs; mount under `/api`. */
+export function blobRoutes(opts: BlobOptions = {}): Hono<{ Bindings: Env }> {
+  const app = new Hono<{ Bindings: Env }>();
+  const fetchFn: typeof fetch = opts.fetchFn ?? ((input, init) => fetch(input, init));
+
+  app.get('/blob/:did/:cid', async (c) => {
+    const { did, cid } = c.req.param();
+    if (!CID.test(cid) || !didDocUrl(did)) return notFound(c);
+    try {
+      const pds = await resolvePds(did, fetchFn);
+      if (!pds) return notFound(c);
+      const url = `${pds}/xrpc/com.atproto.sync.getBlob?did=${encodeURIComponent(did)}&cid=${encodeURIComponent(cid)}`;
+      const res = await safeFetch(url, fetchFn, { maxBytes: MAX_BLOB_BYTES, overflow: 'error', timeoutMs: BLOB_TIMEOUT_MS });
+      const type = (res.headers.get('content-type') ?? '').split(';')[0].trim().toLowerCase();
+      if (!IMAGE_TYPES.has(type)) return notFound(c);
+      return new Response(res.body as unknown as BodyInit, {
+        status: 200,
+        headers: {
+          'Content-Type': type,
+          'Cache-Control': 'public, max-age=31536000, immutable',
+          'X-Content-Type-Options': 'nosniff',
+          'Content-Security-Policy': "default-src 'none'; sandbox",
+        },
+      });
+    } catch {
+      return notFound(c);
+    }
+  });
+
+  return app;
+}
