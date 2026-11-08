@@ -1,0 +1,67 @@
+{
+  "lexicon": 1,
+  "id": "pub.workbench.defs",
+  "defs": {
+    "image": {
+      "type": "object",
+      "required": [
+        "image",
+        "alt"
+      ],
+      "properties": {
+        "image": {
+          "type": "blob",
+          "accept": [
+            "image/*"
+          ],
+          "maxSize": 1000000
+        },
+        "alt": {
+          "type": "string",
+          "maxGraphemes": 120,
+          "maxLength": 1200
+        }
+      }
+    },
+    "link": {
+      "type": "object",
+      "required": [
+        "url"
+      ],
+      "properties": {
+        "url": {
+          "type": "string",
+          "format": "uri",
+          "maxLength": 2048
+        },
+        "title": {
+          "type": "string",
+          "maxGraphemes": 120,
+          "maxLength": 1200
+        }
+      }
+    },
+    "part": {
+      "type": "object",
+      "required": [
+        "item"
+      ],
+      "properties": {
+        "item": {
+          "type": "string",
+          "maxGraphemes": 120,
+          "maxLength": 1200
+        },
+        "quantity": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "note": {
+          "type": "string",
+          "maxGraphemes": 500,
+          "maxLength": 5000
+        }
+      }
+    }
+  }
+}

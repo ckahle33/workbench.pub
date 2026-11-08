@@ -1,0 +1,34 @@
+{
+  "lexicon": 1,
+  "id": "pub.workbench.reply",
+  "defs": {
+    "main": {
+      "type": "record",
+      "key": "tid",
+      "record": {
+        "type": "object",
+        "required": [
+          "subject",
+          "body",
+          "createdAt"
+        ],
+        "properties": {
+          "subject": {
+            "type": "string",
+            "format": "at-uri",
+            "description": "An update or another reply."
+          },
+          "body": {
+            "type": "string",
+            "maxGraphemes": 2000,
+            "maxLength": 20000
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "datetime"
+          }
+        }
+      }
+    }
+  }
+}
