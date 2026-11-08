@@ -199,6 +199,46 @@ describe('projects, updates, profiles', () => {
     expect(body.items.map((u) => u.rkey)).toEqual(['u2', 'u1']);
   });
 
+  it('paginates project updates newest first, exactly once, excluding hidden ones', async () => {
+    await seedProject(P1);
+    await seedProject(P2);
+    for (let i = 1; i <= 5; i++) await seedUpdate(P1, `u${i}`, 100 + i);
+    await seedUpdate(P1, 'tie', 103); // same indexed_at as u3: uri breaks the tie
+    await seedUpdate(P2, 'other', 999);
+    await hideUri(db, updUri('u4'));
+    type Body = { project: { title: string }; items: { rkey: string }[]; cursor: string | null };
+    const page1 = (await (await get(`/api/projects/${ALICE}/p1?limit=2`)).json()) as Body;
+    expect(page1.items.map((u) => u.rkey)).toEqual(['u5', 'u3']);
+    expect(page1.cursor).not.toBeNull();
+    expect(page1.project.title).toBe('title p1');
+    const page2 = (await (await get(`/api/projects/${ALICE}/p1?limit=2&cursor=${encodeURIComponent(page1.cursor!)}`)).json()) as Body;
+    expect(page2.project.title).toBe('title p1');
+    const page3 = (await (await get(`/api/projects/${ALICE}/p1?limit=2&cursor=${encodeURIComponent(page2.cursor!)}`)).json()) as Body;
+    const all = [...page1.items, ...page2.items, ...page3.items].map((u) => u.rkey);
+    expect(all.sort()).toEqual(['tie', 'u1', 'u2', 'u3', 'u5']);
+    expect(new Set(all).size).toBe(all.length);
+    expect(page3.cursor).toBeNull();
+  });
+
+  it('rejects a bad project cursor and clamps the limit', async () => {
+    await seedProject(P1);
+    expect((await get(`/api/projects/${ALICE}/p1?cursor=garbage`)).status).toBe(400);
+    expect((await get(`/api/projects/${ALICE}/p1?limit=100000`)).status).toBe(200);
+  });
+
+  it('seeks the project updates by index, not a table scan', async () => {
+    const plan = await db
+      .prepare(
+        `EXPLAIN QUERY PLAN SELECT * FROM updates WHERE project_uri = ? AND hidden = 0 AND (indexed_at, uri) < (?, ?)
+         ORDER BY indexed_at DESC, uri DESC LIMIT ?`,
+      )
+      .bind(P1, 1, 'at://x', 51)
+      .all<{ detail: string }>();
+    const text = plan.results.map((r) => r.detail).join('\n');
+    expect(text).toMatch(/SEARCH updates USING INDEX idx_updates_project_visible/);
+    expect(text).not.toMatch(/SCAN|TEMP B-TREE/);
+  });
+
   it('404s a hidden or unknown project', async () => {
     await seedProject(P1);
     await hideUri(db, P1);

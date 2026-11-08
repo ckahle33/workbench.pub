@@ -3,9 +3,9 @@ import { Link, useParams } from 'react-router-dom';
 import type { Author, FeedItem, Page, ReplyView } from '../api';
 import { AuthorName } from '../components/AuthorName';
 import { Replies } from '../components/Replies';
-import { Status } from '../components/Status';
+import { LoadMore, Status } from '../components/Status';
 import { TimelineEntry } from '../components/Timeline';
-import { useApi, useTitle } from '../hooks';
+import { usePaged, useTitle } from '../hooks';
 import { asReply, optimistic, useOptimistic } from '../optimistic';
 
 interface UpdateResponse extends Page<ReplyView> {
@@ -15,22 +15,22 @@ interface UpdateResponse extends Page<ReplyView> {
 
 export function Update() {
   const { did = '', rkey = '' } = useParams();
-  const res = useApi<UpdateResponse>(`/api/updates/${encodeURIComponent(did)}/${encodeURIComponent(rkey)}`);
+  const list = usePaged<ReplyView, UpdateResponse>(`/api/updates/${encodeURIComponent(did)}/${encodeURIComponent(rkey)}`);
   const mine = useOptimistic();
-  const serverItems = res.state === 'ready' ? res.data.items : null;
+  const loaded = list.phase === 'ready' ? list.items : null;
   useEffect(() => {
-    if (serverItems) optimistic.prune(serverItems);
-  }, [serverItems, mine]);
-  useTitle(res.state === 'ready' ? res.data.update.heading : '');
+    if (loaded) optimistic.prune(loaded);
+  }, [loaded, mine]);
+  useTitle(list.first?.update.heading ?? '');
 
-  if (res.state === 'loading') return <Status kind="loading" />;
-  if (res.state === 'error') return <Status kind="error" />;
-  if (res.state === 'notfound') return <Status kind="notfound">Update not found.</Status>;
+  if (list.phase === 'loading') return <Status kind="loading" />;
+  if (list.phase === 'error' || (list.phase === 'ready' && !list.first)) return <Status kind="error" />;
+  if (list.phase === 'notfound' || !list.first) return <Status kind="notfound">Update not found.</Status>;
 
-  const { update, author } = res.data;
+  const { update, author } = list.first;
   // Replies anywhere beneath this update belong in the thread.
-  const thread = new Set([update.uri, ...res.data.items.map((r) => r.uri)]);
-  const replies = optimistic.mergeWith(res.data.items, (i) => i.kind === 'reply' && thread.has(i.subjectUri ?? '')).map(asReply);
+  const thread = new Set([update.uri, ...list.items.map((r) => r.uri)]);
+  const replies = optimistic.mergeWith(list.items, (i) => i.kind === 'reply' && thread.has(i.subjectUri ?? '')).map(asReply);
 
   return (
     <>
@@ -41,6 +41,7 @@ export function Update() {
       <section aria-labelledby="replies-h">
         <h2 id="replies-h">Replies</h2>
         <Replies replies={replies} rootUri={update.uri} />
+        <LoadMore label="Load more replies" hasMore={list.hasMore} loading={list.loadingMore} failed={list.moreFailed} onClick={list.loadMore} />
       </section>
     </>
   );

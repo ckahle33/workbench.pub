@@ -2,10 +2,10 @@ import { useEffect } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import type { Author, Page, ProjectView, UpdateView } from '../api';
 import { AuthorName } from '../components/AuthorName';
-import { Status } from '../components/Status';
+import { LoadMore, Status } from '../components/Status';
 import { StatusBadge } from '../components/StatusBadge';
 import { DateText, Timeline } from '../components/Timeline';
-import { useApi, useTitle } from '../hooks';
+import { usePaged, useTitle } from '../hooks';
 import { asProject, asUpdate, optimistic, useOptimistic } from '../optimistic';
 
 interface ProjectResponse extends Page<UpdateView> {
@@ -15,28 +15,28 @@ interface ProjectResponse extends Page<UpdateView> {
 
 export function Project() {
   const { did = '', rkey = '' } = useParams();
-  const res = useApi<ProjectResponse>(`/api/projects/${encodeURIComponent(did)}/${encodeURIComponent(rkey)}`);
+  const list = usePaged<UpdateView, ProjectResponse>(`/api/projects/${encodeURIComponent(did)}/${encodeURIComponent(rkey)}`);
   const mine = useOptimistic();
   const uri = `at://${did}/pub.workbench.project/${rkey}`;
 
   // The server has caught up with some optimistic items: forget them.
-  const serverItems = res.state === 'ready' ? res.data.items : null;
+  const loaded = list.phase === 'ready' ? list.items : null;
   useEffect(() => {
-    if (serverItems) optimistic.prune(serverItems);
-  }, [serverItems, mine]);
+    if (loaded) optimistic.prune(loaded);
+  }, [loaded, mine]);
 
   // A project the author just created may not be indexed yet.
-  const pending = res.state === 'notfound' ? mine.find((i) => i.uri === uri && i.kind === 'project') : undefined;
-  const project = res.state === 'ready' ? res.data.project : pending ? asProject(pending) : null;
+  const pending = list.phase === 'notfound' ? mine.find((i) => i.uri === uri && i.kind === 'project') : undefined;
+  const project = list.first?.project ?? (pending ? asProject(pending) : null);
   useTitle(project?.title ?? '');
 
-  if (res.state === 'loading') return <Status kind="loading" />;
-  if (res.state === 'error') return <Status kind="error" />;
+  if (list.phase === 'loading') return <Status kind="loading" />;
+  if (list.phase === 'error') return <Status kind="error" />;
   if (!project) return <Status kind="notfound">Project not found.</Status>;
 
-  const author: Author = res.state === 'ready' ? res.data.author : { did };
+  const author: Author = list.first?.author ?? { did };
   const updates = optimistic
-    .mergeWith(serverItems ?? [], (i) => i.kind === 'update' && i.projectUri === project.uri)
+    .mergeWith(list.items, (i) => i.kind === 'update' && i.projectUri === project.uri)
     .map(asUpdate);
 
   return (
@@ -50,6 +50,7 @@ export function Project() {
         <p dir="auto">{project.summary}</p>
       </header>
       {updates.length === 0 ? <Status kind="empty">No updates yet.</Status> : <Timeline updates={updates} />}
+      <LoadMore label="Load more updates" hasMore={list.hasMore} loading={list.loadingMore} failed={list.moreFailed} onClick={list.loadMore} />
     </>
   );
 }

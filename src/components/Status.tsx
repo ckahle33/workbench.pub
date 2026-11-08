@@ -19,13 +19,13 @@ export function Status({ kind, children }: { kind: Kind; children?: ReactNode })
   );
 }
 
-export function LoadMore({ hasMore, loading, failed, onClick }: { hasMore: boolean; loading: boolean; failed: boolean; onClick: () => void }) {
+export function LoadMore({ label = 'Load more', hasMore, loading, failed, onClick }: { label?: string; hasMore: boolean; loading: boolean; failed: boolean; onClick: () => void }) {
   if (!hasMore) return null;
   return (
     <div className="load-more">
       {failed && <Status kind="error" />}
       <button type="button" onClick={onClick} disabled={loading}>
-        {loading ? 'Loading…' : 'Load more'}
+        {loading ? 'Loading…' : label}
       </button>
     </div>
   );

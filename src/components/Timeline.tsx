@@ -26,6 +26,7 @@ export function TimelineEntry({ update: u, headingLevel = 2 }: { update: UpdateV
   const links = parseLinks(u.links);
   const parts = parseParts(u.parts);
   const Heading = `h${headingLevel}` as const;
+  const PartsHeading = headingLevel === 1 ? 'h2' : 'h3';
   return (
     <article className="update">
       <p className="meta">
@@ -42,7 +43,7 @@ export function TimelineEntry({ update: u, headingLevel = 2 }: { update: UpdateV
       {u.body && <p className="notes" dir="auto">{u.body}</p>}
       {parts.length > 0 && (
         <>
-          <h3>Parts</h3>
+          <PartsHeading>Parts</PartsHeading>
           <ul className="parts">
             {parts.map((p, i) => (
               <li key={i} dir="auto">

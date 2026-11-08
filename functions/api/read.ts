@@ -31,6 +31,7 @@ const PROFILE_URL = 'https://public.api.bsky.app/xrpc/app.bsky.actor.getProfile'
 const PROFILE_TTL_MS = 24 * 3_600_000;
 const DEFAULT_LIMIT = 30;
 const MAX_LIMIT = 100;
+const PROJECT_UPDATES_LIMIT = 50;
 
 type Profile = Omit<ProfileRow, 'fetchedAt'>;
 
@@ -66,9 +67,9 @@ export function readRoutes(opts: ReadOptions = {}): Hono<{ Bindings: Env }> {
   const fetchFn = opts.fetchFn ?? ((input, init) => fetch(input, init));
 
   /** Parses `limit` and `cursor`; a bad cursor is a client error. */
-  const paging = (q: (k: string) => string | undefined, keyset = true): { limit: number; cursor?: ListCursor } | null => {
-    const n = Number(q('limit') ?? DEFAULT_LIMIT);
-    const limit = Number.isFinite(n) ? Math.min(Math.max(Math.trunc(n), 1), MAX_LIMIT) : DEFAULT_LIMIT;
+  const paging = (q: (k: string) => string | undefined, keyset = true, defaultLimit = DEFAULT_LIMIT): { limit: number; cursor?: ListCursor } | null => {
+    const n = Number(q('limit') ?? defaultLimit);
+    const limit = Number.isFinite(n) ? Math.min(Math.max(Math.trunc(n), 1), MAX_LIMIT) : defaultLimit;
     const raw = q('cursor');
     if (!raw || !keyset) return { limit };
     const cursor = decodeCursor(raw);
@@ -95,14 +96,16 @@ export function readRoutes(opts: ReadOptions = {}): Hono<{ Bindings: Env }> {
   });
 
   app.get('/projects/:did/:rkey', async (c) => {
+    const page = paging((k) => c.req.query(k), true, PROJECT_UPDATES_LIMIT);
+    if (!page) return c.json({ error: 'bad cursor' }, 400);
     const { did, rkey } = c.req.param();
-    const found = await getProjectWithUpdates(c.env.DB, `at://${did}/pub.workbench.project/${rkey}`);
+    const found = await getProjectWithUpdates(c.env.DB, `at://${did}/pub.workbench.project/${rkey}`, page.cursor, page.limit);
     if (!found) return c.json({ error: 'not found' }, 404);
     return c.json({
       project: found.project,
       author: await lookupProfile(c.env.DB, did, fetchFn),
       items: found.updates,
-      cursor: null,
+      cursor: found.cursor,
     });
   });
 

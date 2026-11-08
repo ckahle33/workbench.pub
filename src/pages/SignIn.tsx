@@ -3,9 +3,11 @@ import { Navigate } from 'react-router-dom';
 import { normalizeIdentifier } from '../auth/config';
 import { signIn } from '../auth/oauth';
 import { useSession } from '../auth/SessionContext';
+import { useTitle } from '../hooks';
 
 export function SignIn() {
   const { session, loading } = useSession();
+  useTitle('Sign in');
   const [value, setValue] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);

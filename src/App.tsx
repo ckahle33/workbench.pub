@@ -6,6 +6,12 @@ import { Project } from './pages/Project';
 import { SignIn } from './pages/SignIn';
 import { Topic } from './pages/Topic';
 import { Update } from './pages/Update';
+import { useTitle } from './hooks';
+
+function NotFound() {
+  useTitle('Page not found');
+  return <p className="status">Page not found.</p>;
+}
 
 function SiteHeader() {
   const { session, loading, signOut } = useSession();
@@ -45,7 +51,7 @@ export function App() {
           <Route path="/u/:did/:rkey" element={<Update />} />
           <Route path="/profile/:did" element={<Profile />} />
           <Route path="/signin" element={<SignIn />} />
-          <Route path="*" element={<p className="status">Page not found.</p>} />
+          <Route path="*" element={<NotFound />} />
         </Routes>
       </main>
     </>

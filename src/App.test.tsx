@@ -36,4 +36,13 @@ describe('App', () => {
     expect(await screen.findByText('@me.test')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /sign out/i })).toBeInTheDocument();
   });
+
+  it('sets document.title on the sign-in and not-found routes', async () => {
+    vi.mocked(restoreSession).mockResolvedValue(null);
+    const a = renderApp('/signin');
+    await vi.waitFor(() => expect(document.title).toMatch(/^Sign in/));
+    a.unmount();
+    renderApp('/nope');
+    await vi.waitFor(() => expect(document.title).toMatch(/^Page not found/));
+  });
 });

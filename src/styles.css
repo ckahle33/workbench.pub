@@ -53,8 +53,13 @@ h3 { font-size: 1.05rem; margin: 1rem 0 0.25rem; }
 p { margin: 0.5rem 0; }
 
 a { color: var(--accent); text-underline-offset: 0.15em; }
-a, button, input, textarea, select { min-height: 44px; }
-p a, li a, .meta a { min-height: 0; }
+button, input, textarea, select { min-height: 44px; }
+/* Links inside cards, metadata and lists: inline-flex so min-height applies and they reach a 44px tap target. */
+.cards a, .meta a, .update h1 a, .update h2 a, .replies a, .timeline a, .site-header a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+}
 :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
 
 .skip-link {

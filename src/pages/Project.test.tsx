@@ -134,3 +134,31 @@ describe('Project page', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(/something went wrong/i);
   });
 });
+
+describe('Project page pagination', () => {
+  const many = (from: number, n: number) => Array.from({ length: n }, (_, i) => update(from + i, { uri: `at://${ALICE}/pub.workbench.update/m${from + i}`, heading: `Entry ${from + i}` }));
+
+  it('shows Load more updates when there is a cursor, appends the next page without duplicates, keeps optimistic items on top', async () => {
+    optimistic.add({
+      kind: 'update', uri: `at://${ALICE}/pub.workbench.update/mine`, did: ALICE, projectUri: project(1).uri,
+      heading: 'Mine', body: 'x', createdAt: '2026-11-07T10:00:00.000Z',
+    });
+    const fx = mockApi((u) => {
+      if (u.pathname !== `/api/projects/${ALICE}/p1`) return undefined;
+      return u.searchParams.get('cursor') === '20:at://c'
+        ? { project: project(1), author, items: [...many(19, 2), ...many(40, 1)], cursor: null } // repeats Entry 19 and 20
+        : { project: project(1), author, items: many(1, 20), cursor: '20:at://c' };
+    });
+    renderPage();
+    const button = await screen.findByRole('button', { name: 'Load more updates' });
+    expect(screen.getAllByRole('heading', { level: 2 })[0]).toHaveTextContent('Mine');
+    button.click();
+    expect(await screen.findByRole('heading', { level: 2, name: 'Entry 40' })).toBeInTheDocument();
+    const names = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent);
+    expect(names).toHaveLength(22);
+    expect(new Set(names).size).toBe(22);
+    expect(names[0]).toBe('Mine');
+    expect(fx.calls.at(-1)!.searchParams.get('cursor')).toBe('20:at://c');
+    expect(screen.queryByRole('button', { name: /load more/i })).toBeNull();
+  });
+});

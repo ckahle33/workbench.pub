@@ -435,22 +435,28 @@ export const listTopicProjects = (db: D1Database, slug: string, cursor: ListCurs
 export const listProfileProjects = (db: D1Database, did: string, cursor: ListCursor | undefined, limit: number) =>
   listProjects(db, 'did', did, cursor, limit);
 
-/** The project plus its visible updates, newest first; null when missing or hidden. */
+/**
+ * The project plus one page of its visible updates, newest first (keyset on indexed_at, uri);
+ * null when the project is missing or hidden. The project row is returned on every page.
+ */
 export async function getProjectWithUpdates(
   db: D1Database,
   uri: string,
-  updateLimit = 200,
-): Promise<{ project: ProjectView; updates: UpdateView[] } | null> {
+  cursor?: ListCursor,
+  limit = 50,
+): Promise<{ project: ProjectView; updates: UpdateView[]; cursor: string | null } | null> {
   const p = await db.prepare('SELECT * FROM projects WHERE uri = ? AND hidden = 0').bind(uri).first<Row>();
   if (!p) return null;
+  const seek = cursor ? 'AND (indexed_at, uri) < (?, ?)' : '';
   const { results } = await db
     .prepare(
-      `SELECT * FROM updates WHERE project_uri = ? AND hidden = 0
+      `SELECT * FROM updates WHERE project_uri = ? AND hidden = 0 ${seek}
        ORDER BY indexed_at DESC, uri DESC LIMIT ?`,
     )
-    .bind(uri, updateLimit)
+    .bind(...(cursor ? [uri, cursor.indexedAt, cursor.uri, limit + 1] : [uri, limit + 1]))
     .all<Row>();
-  return { project: toProject(p), updates: results.map(toUpdate) };
+  const page = paginate(results.map(toUpdate), limit);
+  return { project: toProject(p), updates: page.items, cursor: page.cursor };
 }
 
 /**

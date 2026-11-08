@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { optimistic } from '../optimistic';
 import { ALICE, BOB, mockApi, project, update } from '../testUtils';
@@ -59,5 +59,32 @@ describe('Update page', () => {
     mockApi(() => undefined);
     renderPage();
     expect(await screen.findByText(/not found/i)).toBeInTheDocument();
+  });
+});
+
+describe('Update page structure and pagination', () => {
+  it('never skips a heading level', async () => {
+    mockApi(() => ({ update: { ...full, parts: [{ item: 'Screw' }] }, author: { did: ALICE }, items: [], cursor: null }));
+    renderPage();
+    await screen.findByRole('heading', { level: 1 });
+    const levels = screen.getAllByRole('heading').map((h) => Number(h.tagName[1]));
+    expect(levels[0]).toBe(1);
+    levels.forEach((l, i) => i > 0 && expect(l).toBeLessThanOrEqual(levels[i - 1] + 1));
+    expect(screen.getByRole('heading', { name: 'Parts' }).tagName).toBe('H2');
+  });
+
+  it('honours a replies cursor with Load more replies and does not duplicate', async () => {
+    const page = Array.from({ length: 20 }, (_, i) => reply(i + 1, u1.uri, i === 0 ? 'first' : `r${i}`));
+    const fx = mockApi((u) =>
+      u.searchParams.get('cursor') === 'next'
+        ? { update: full, author: { did: ALICE }, items: [...page, reply(30, u1.uri, 'second')], cursor: null }
+        : { update: full, author: { did: ALICE }, items: page, cursor: 'next' },
+    );
+    renderPage();
+    const more = await screen.findByRole('button', { name: 'Load more replies' });
+    fireEvent.click(more);
+    expect(await screen.findByText('second')).toBeInTheDocument();
+    expect(screen.getAllByText('first')).toHaveLength(1);
+    expect(fx.calls.at(-1)!.searchParams.get('cursor')).toBe('next');
   });
 });
